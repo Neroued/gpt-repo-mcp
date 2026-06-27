@@ -33,6 +33,8 @@ const LOG_FILE = join(LOG_DIR, "gpt-repo-mcp-secure.log");
 const SERVICE_NAME = "gpt-repo-mcp-secure.service";
 const USER_SYSTEMD_DIR = join(HOME, ".config", "systemd", "user");
 const USER_SERVICE_FILE = join(USER_SYSTEMD_DIR, SERVICE_NAME);
+const NODE_BIN_DIR = dirname(process.execPath);
+const DEFAULT_SYSTEMD_PATH = `${NODE_BIN_DIR}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`;
 
 const TUNNEL_CLIENT_VERSION = "v0.0.9--context-conduit-topaz";
 const TUNNEL_CLIENT_URL =
@@ -374,11 +376,11 @@ async function start() {
   await rm(LOG_FILE, { force: true });
   const out = openSync(LOG_FILE, "a");
   try {
-    const child = spawn("node", ["scripts/connect-secure.mjs"], {
+    const child = spawn(process.execPath, ["scripts/connect-secure.mjs"], {
       cwd: ROOT,
       detached: true,
       stdio: ["ignore", out, out],
-      env: process.env
+      env: envWithNodePath(process.env)
     });
     child.unref();
     await writeFile(PID_FILE, `${child.pid}\n`);
@@ -416,10 +418,10 @@ async function runForeground() {
   };
 
   try {
-    child = spawn("node", ["scripts/connect-secure.mjs"], {
+    child = spawn(process.execPath, ["scripts/connect-secure.mjs"], {
       cwd: ROOT,
       stdio: ["ignore", out, out],
-      env: process.env
+      env: envWithNodePath(process.env)
     });
     await writeFile(PID_FILE, `${child.pid}\n`);
 
@@ -580,6 +582,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=${ROOT}
 ExecStart=${process.execPath} ${join(ROOT, "scripts", "secure-tunnel-ops.mjs")} run
+Environment=PATH=${DEFAULT_SYSTEMD_PATH}
 Restart=always
 RestartSec=5
 KillSignal=SIGTERM
@@ -699,6 +702,16 @@ function unquote(value) {
 function resolvePath(path) {
   if (path.startsWith("~/")) return join(HOME, path.slice(2));
   return resolve(ROOT, path);
+}
+
+function envWithNodePath(env) {
+  const path = env.PATH ?? "";
+  const entries = path.split(":").filter(Boolean);
+  const nextPath = entries.includes(NODE_BIN_DIR) ? path : `${NODE_BIN_DIR}:${path || DEFAULT_SYSTEMD_PATH}`;
+  return {
+    ...env,
+    PATH: nextPath
+  };
 }
 
 function relativeToRoot(path) {
