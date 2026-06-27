@@ -74,6 +74,8 @@ With Secure MCP Tunnel, the local MCP endpoint stays private at `http://127.0.0.
 
 In ChatGPT connector settings, choose Tunnel as the connection type and select or paste the `tunnel_...` id.
 
+For repeatable WSL operations, startup checks, logs, and ChatGPT tool toggles, see [Secure MCP Tunnel Runbook](SECURE_TUNNEL_RUNBOOK.md).
+
 ## Security Notes
 
 - Public tunnel URLs are reachable by anyone who has the full URL while the tunnel is running.

@@ -2,6 +2,7 @@ import { access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { spawn } from "node:child_process";
 import process from "node:process";
+import { setTimeout as delay } from "node:timers/promises";
 
 const DEFAULT_CONFIG_PATH = "./config.local.json";
 const DEFAULT_PORT = "8787";
@@ -15,7 +16,12 @@ ensureRequiredEnv("CONTROL_PLANE_API_KEY");
 const tunnelClientBin = envValue("TUNNEL_CLIENT_BIN", undefined, "tunnel-client");
 const tunnelClientProfile = envValue("TUNNEL_CLIENT_PROFILE", undefined, DEFAULT_PROFILE);
 
-startProcesses();
+try {
+  await startProcesses();
+} catch (error) {
+  globalThis.console.error(error instanceof Error ? error.message : String(error));
+  terminateAndExit(1);
+}
 
 async function loadDotEnv(path) {
   let raw;
@@ -97,7 +103,7 @@ function prefixOutput(stream, label) {
   });
 }
 
-function startProcesses() {
+async function startProcesses() {
   const configPath = envValue("GPT_REPO_CONFIG", "REPO_READER_CONFIG", DEFAULT_CONFIG_PATH);
   const port = envValue("PORT", undefined, DEFAULT_PORT);
   const logFormat = envValue("GPT_REPO_LOG_FORMAT", "REPO_READER_LOG_FORMAT", "pretty");
@@ -124,6 +130,8 @@ function startProcesses() {
   prefixOutput(mcp.stderr, "mcp");
   mcp.once("exit", onChildExit("mcp"));
 
+  await waitForLocalMcp(port);
+
   const tunnel = spawn(tunnelClientBin, ["run", "--profile", tunnelClientProfile], {
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"]
@@ -136,6 +144,33 @@ function startProcesses() {
     globalThis.console.error(`[tunnel] failed to start: ${error.message}`);
     terminateAndExit(1);
   });
+}
+
+async function waitForLocalMcp(port) {
+  const healthUrl = `http://127.0.0.1:${port}/health`;
+  const deadline = Date.now() + 15000;
+  let lastError = "";
+
+  while (Date.now() < deadline) {
+    if (shuttingDown) {
+      throw new Error("Startup interrupted while waiting for local MCP health.");
+    }
+
+    try {
+      const response = await fetch(healthUrl);
+      if (response.ok) {
+        globalThis.console.log(`Local MCP health check passed: ${healthUrl}`);
+        return;
+      }
+      lastError = `HTTP ${response.status}`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+
+    await delay(250);
+  }
+
+  throw new Error(`Local MCP did not become healthy at ${healthUrl}: ${lastError}`);
 }
 
 function onChildExit(name) {
