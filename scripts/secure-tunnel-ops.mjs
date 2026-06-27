@@ -35,6 +35,16 @@ const USER_SYSTEMD_DIR = join(HOME, ".config", "systemd", "user");
 const USER_SERVICE_FILE = join(USER_SYSTEMD_DIR, SERVICE_NAME);
 const NODE_BIN_DIR = dirname(process.execPath);
 const DEFAULT_SYSTEMD_PATH = `${NODE_BIN_DIR}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`;
+const PROXY_ENV_KEYS = [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+  "no_proxy"
+];
 
 const TUNNEL_CLIENT_VERSION = "v0.0.9--context-conduit-topaz";
 const TUNNEL_CLIENT_URL =
@@ -542,7 +552,7 @@ async function installService(options) {
   }
 
   await mkdir(USER_SYSTEMD_DIR, { recursive: true });
-  await writeFile(USER_SERVICE_FILE, serviceUnitText());
+  await writeFile(USER_SERVICE_FILE, serviceUnitText(env));
   await run("systemctl", ["--user", "daemon-reload"], { inherit: true });
   await runAllowFailure("systemctl", ["--user", "stop", SERVICE_NAME]);
   await stop({ quiet: true });
@@ -571,7 +581,14 @@ async function serviceStatus() {
   await run("systemctl", ["--user", "status", SERVICE_NAME, "--no-pager"], { inherit: true });
 }
 
-function serviceUnitText() {
+function serviceUnitText(env = {}) {
+  const environmentLines = [
+    systemdEnvironmentLine("PATH", DEFAULT_SYSTEMD_PATH),
+    ...PROXY_ENV_KEYS
+      .filter((key) => env[key])
+      .map((key) => systemdEnvironmentLine(key, env[key]))
+  ];
+
   return `[Unit]
 Description=GPT Repo MCP Secure Tunnel
 Documentation=https://github.com/CAHN91/gpt-repo-mcp
@@ -582,7 +599,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=${ROOT}
 ExecStart=${process.execPath} ${join(ROOT, "scripts", "secure-tunnel-ops.mjs")} run
-Environment=PATH=${DEFAULT_SYSTEMD_PATH}
+${environmentLines.join("\n")}
 Restart=always
 RestartSec=5
 KillSignal=SIGTERM
@@ -591,6 +608,17 @@ TimeoutStopSec=15
 [Install]
 WantedBy=default.target
 `;
+}
+
+function systemdEnvironmentLine(key, value) {
+  return `Environment="${key}=${escapeSystemdEnvironmentValue(String(value))}"`;
+}
+
+function escapeSystemdEnvironmentValue(value) {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/%/g, "%%");
 }
 
 async function ensureSystemdAvailable() {
