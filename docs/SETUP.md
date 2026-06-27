@@ -1,6 +1,6 @@
 # Setup
 
-This guide gets a local GPT Repo MCP (`gpt-repo-mcp`) server configured for approved repositories. For ChatGPT Developer Mode connection steps, see [CHATGPT_CONNECT.md](CHATGPT_CONNECT.md). For tunnel choices, see [CONNECTION_OPTIONS.md](CONNECTION_OPTIONS.md).
+This guide configures a local GPT Repo MCP (`gpt-repo-mcp`) server for approved repositories. For ChatGPT Developer Mode connection steps, see [CHATGPT_CONNECT.md](CHATGPT_CONNECT.md). For tunnel choices, see [CONNECTION_OPTIONS.md](CONNECTION_OPTIONS.md).
 
 ## Requirements
 
@@ -55,7 +55,7 @@ Copy the account connection command from your ngrok dashboard and run it once in
 
 After ngrok is installed and connected to your account, use the normal quickstart: `npm run connect`.
 
-`npm run connect` starts the local MCP server on port `8787`, starts or reuses ngrok, and prints the ChatGPT connector URL ending in `/t/<random-token>/mcp`. You do not need to run `ngrok http 8787` yourself unless you are following the manual tunnel flow.
+`npm run connect` starts the local MCP server on port `8787`, starts or reuses ngrok, and prints the ChatGPT connector URL ending in `/t/<random-token>/mcp`.
 
 ## Install
 
@@ -63,15 +63,18 @@ After ngrok is installed and connected to your account, use the normal quickstar
 git clone https://github.com/CAHN91/gpt-repo-mcp.git
 cd gpt-repo-mcp
 npm install
+npm run build
 ```
-
-## Build
-
-Run `npm run build`.
 
 ## Create Local Config
 
-Run `cp config.example.json config.local.json`. This creates a valid empty local config with no approved repositories. `config.local.json` is ignored by git and should stay uncommitted.
+Run:
+
+```bash
+cp config.example.json config.local.json
+```
+
+This creates a valid empty local config with no approved repositories. `config.local.json` is ignored by git and should stay uncommitted.
 
 ## Add A Repository
 
@@ -79,29 +82,26 @@ Run `cp config.example.json config.local.json`. This creates a valid empty local
 npm run add -- /path/to/your/repo
 ```
 
-The CLI adds the first approved local repository root to the empty `config.local.json`. It prompts for a permission mode when stdin is interactive: `read`, `write`, or `ship`. Non-interactive runs default to read mode.
+The CLI adds the first approved local repository root to the empty `config.local.json`. It prompts for a permission mode when stdin is interactive: `read` or `write`. Non-interactive runs default to read mode.
 
 Use explicit mode flags when you want predictable setup:
 
 ```bash
 npm run add -- /path/to/your/repo --mode read
 npm run add -- /path/to/your/repo --mode write
-npm run add -- /path/to/your/repo --mode ship
 ```
 
-- `read`: read-only tools.
-- `write`: read tools plus broad repo-local writes guarded by hard denied paths, secret checks, path sandboxing, and size limits.
-- `ship`: write mode plus local git stage, commit, recover, and cleanup operations.
+- `read`: repository reading, search, status, diff, and policy tools.
+- `write`: read tools plus docs-only writes to `docs/**` and `README.md`.
 
-No mode enables push, pull, reset, checkout, switch, rebase, merge, stash, clean, force, branch deletion, shell execution, or arbitrary command execution.
+`ship` mode has been removed. No mode enables source edits, staging, commits, restore, cleanup, push, pull, reset, checkout, switch, rebase, merge, stash, clean, force, branch deletion, shell execution, or arbitrary command execution.
 
 Permission mode summary:
 
 | Mode | Effect |
 | --- | --- |
 | `read` | Read-only repository tools; writes and local operations stay disabled. |
-| `write` | Read tools plus broad repo-local writes guarded by hard denied paths, secret checks, path sandboxing, and size limits. |
-| `ship` | Same write policy as `write`, plus local stage, commit, recover, and cleanup operations. |
+| `write` | Read tools plus docs-only writes guarded by deny rules, secret checks, path sandboxing, and size limits. |
 
 ## List Repositories
 
@@ -125,7 +125,11 @@ Run `npm run doctor`. The doctor command checks config validation, package scrip
 
 ## Quickstart: Start MCP And Built-In Tunnel
 
-Use the built-in convenience path first: `npm run connect`.
+Use the built-in convenience path first:
+
+```bash
+npm run connect
+```
 
 This starts the local MCP server and tries to use or reuse ngrok. It should print:
 
@@ -155,13 +159,19 @@ You can also use `npm run tunnel` to start only the bundled ngrok command for lo
 
 ## Advanced: OpenAI Secure MCP Tunnel
 
-For longer-lived or private connector setups, and for workspaces that support it, use OpenAI Secure MCP Tunnel. Run `cp .env.example .env`, fill `.env` with your OpenAI Secure MCP Tunnel runtime API key, `tunnel-client` binary path, and profile name, then run `npm run connect:secure`. The profile name in `.env.example` is only a convention; create or configure that profile locally, or replace it with your own configured profile name. See [CONNECTION_OPTIONS.md](CONNECTION_OPTIONS.md) for connection details.
+For longer-lived or private connector setups, and for workspaces that support it, use OpenAI Secure MCP Tunnel. Run `cp .env.example .env`, fill `.env` with your OpenAI Secure MCP Tunnel runtime API key, tunnel client binary path, and profile name, then run:
+
+```bash
+npm run connect:secure
+```
+
+For the WSL systemd deployment, see [SECURE_TUNNEL_RUNBOOK.md](SECURE_TUNNEL_RUNBOOK.md).
 
 ## How To Know It Worked
 
 - `npm run connect` prints an HTTPS URL ending in `/t/<random-token>/mcp`.
 - Or `npm run connect:secure` starts the local MCP server and `tunnel-client`.
-- ChatGPT Developer Mode accepts the connector URL.
+- ChatGPT Developer Mode accepts the connector URL or tunnel.
 - A new ChatGPT conversation can call the connector.
 - This prompt returns your configured repos:
 
@@ -181,16 +191,14 @@ Use GPT Repo MCP. Which repositories can you access?
 | `npm run tunnel` | Start only the ngrok tunnel. |
 | `npm run list` | List approved repositories. |
 | `npm run add -- <path>` | Add an approved repository root. |
-| `npm run add -- <path> --mode <mode>` | Add a repository root with explicit `read`, `write`, or `ship` mode. |
+| `npm run add -- <path> --mode <mode>` | Add a repository root with explicit `read` or `write` mode. |
 | `npm run remove -- <repo_id>` | Remove an approved repository root. |
 | `npm run check:config` | Validate local config. |
 | `npm test -- tests/tool-contracts.test.ts tests/mcp-contract.test.ts` | Run focused MCP contract checks. |
 
-## Opt-In Mutating Tools
+## Docs-Only Writes
 
-The default setup is read-mostly. Mutating tools are disabled by default and should only be enabled for trusted repositories.
-
-Enable them per repo in `config.local.json`:
+The default setup is read-only. Enable docs-only writes per repo with `npm run add -- <path> --mode write` or by editing `config.local.json`:
 
 ```json
 {
@@ -198,31 +206,36 @@ Enable them per repo in `config.local.json`:
     {
       "repo_id": "example-repo",
       "writes": {
-        "enabled": true
+        "enabled": true,
+        "allowed_globs": ["docs/**", "README.md"]
       },
       "operations": {
-        "enabled": true,
-        "git_stage_enabled": true,
-        "git_commit_enabled": true,
-        "cleanup_enabled": true
+        "enabled": false
       }
     }
   ]
 }
 ```
 
-Write, git, and cleanup actions are still policy-limited. ChatGPT will ask for confirmation for mutating tool calls unless you choose to remember approval for the conversation.
+Manual config remains supported for advanced deployments. Each repo entry must include a repo id and an absolute root path:
 
-If a read, write, or cleanup path is unexpectedly blocked, ask ChatGPT to run `repo_policy_explain` with the repo id and path. It explains read/write/cleanup policy decisions and local git operation toggles without reading or mutating files.
+```json
+{
+  "repo_id": "example-repo",
+  "root": "/absolute/path/to/repo"
+}
+```
+
+If a read or write path is unexpectedly blocked, ask ChatGPT to run `repo_policy_explain` with the repo id and path. It explains read/write policy decisions and local operation toggles without reading or mutating files.
 
 ## Common Failure Modes
 
 - `config.local.json` is missing: run `cp config.example.json config.local.json`.
 - Unknown `repo_id`: run `npm run list`.
-- ChatGPT cannot connect through Secure MCP Tunnel: confirm `npm run connect:secure` is still running, refresh connector metadata, and verify the connector uses Tunnel.
+- ChatGPT cannot connect through Secure MCP Tunnel: confirm `npm run connect:secure` or the secure systemd service is still running, refresh connector metadata, and verify the connector uses Tunnel.
 - ChatGPT cannot connect through a public tunnel: confirm the URL is public HTTPS and exactly matches the current `/t/<token>/mcp` URL.
 - Tunnel URL changed: update or refresh the ChatGPT connector.
 - Port `8787` is busy: stop the process using it, then rerun `npm run connect`.
 - ngrok endpoint already online: `npm run connect` tries to reuse an existing HTTPS tunnel from the local ngrok API.
 - Schema mismatch in ChatGPT: refresh connector metadata, then run `npm test -- tests/tool-contracts.test.ts tests/mcp-contract.test.ts`.
-- Write disabled: keep the default read-mostly setup, or explicitly enable `writes.enabled` for a trusted repo.
+- Write disabled: keep the default read-only setup, or explicitly enable docs-only writes for a trusted repo.

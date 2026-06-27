@@ -53,7 +53,7 @@ export type ToolDefinition = {
   handler: ToolHandler;
 };
 
-export const toolCatalog: ToolDefinition[] = [
+export const allToolCatalog: ToolDefinition[] = [
   {
     name: "repo_list_roots",
     title: "List approved repositories",
@@ -397,3 +397,38 @@ export const toolCatalog: ToolDefinition[] = [
     handler: writeHandoffHandler
   }
 ];
+
+export const DEFAULT_VISIBLE_TOOL_NAMES = [
+  "repo_list_roots",
+  "repo_project_brief",
+  "repo_index_summary",
+  "repo_tree",
+  "repo_read_many",
+  "repo_fetch_file",
+  "repo_fetch_region",
+  "repo_outline_file",
+  "repo_search",
+  "repo_search_symbol",
+  "repo_symbols",
+  "repo_task_inventory",
+  "repo_changed_since",
+  "repo_decision_memory",
+  "repo_git_status",
+  "repo_git_diff",
+  "repo_last_write",
+  "repo_write_file",
+  "repo_write_changes",
+  "repo_policy_explain"
+] as const satisfies readonly ToolName[];
+
+const allToolCatalogByName = new Map<ToolName, ToolDefinition>(
+  allToolCatalog.map((tool) => [tool.name, tool])
+);
+
+export const toolCatalog: ToolDefinition[] = DEFAULT_VISIBLE_TOOL_NAMES.map((name) => {
+  const tool = allToolCatalogByName.get(name);
+  if (!tool) {
+    throw new Error(`Missing visible tool definition: ${name}`);
+  }
+  return tool;
+});

@@ -51,22 +51,30 @@ const TUNNEL_CLIENT_URL =
   "https://persistent.oaistatic.com/tunnel-client/v0.0.9--context-conduit-topaz/tunnel-client-v0.0.9--context-conduit-topaz-linux-amd64.zip";
 const TUNNEL_CLIENT_SHA256 = "eab94825dbd589e938a6a7ba5cd74bf0becaa3bef0e655f4438a0f75fddfbc8f";
 
-const READ_ONLY_TOOLS = [
+const ENABLED_TOOLS = [
   "repo_list_roots",
+  "repo_project_brief",
+  "repo_index_summary",
   "repo_policy_explain",
   "repo_tree",
-  "repo_fetch_file",
   "repo_read_many",
-  "repo_change_plan",
-  "repo_plan_review",
-  "repo_prepare_codex_task",
-  "repo_codex_review",
-  "repo_next_action"
+  "repo_fetch_file",
+  "repo_fetch_region",
+  "repo_outline_file",
+  "repo_search",
+  "repo_search_symbol",
+  "repo_symbols",
+  "repo_task_inventory",
+  "repo_changed_since",
+  "repo_decision_memory",
+  "repo_git_status",
+  "repo_git_diff",
+  "repo_last_write",
+  "repo_write_file",
+  "repo_write_changes"
 ];
 
 const DISABLE_TOOLS = [
-  "repo_search",
-  "repo_git_diff",
   "repo_git_review",
   "repo_git_stage",
   "repo_git_unstage",
@@ -78,10 +86,87 @@ const DISABLE_TOOLS = [
   "repo_write_stage_commit",
   "repo_write_recover",
   "repo_cleanup_paths",
+  "repo_change_plan",
+  "repo_next_action",
+  "repo_plan_review",
+  "repo_prepare_codex_task",
   "repo_write_codex_task",
-  "repo_write_file",
-  "repo_write_changes",
+  "repo_codex_review",
   "repo_write_handoff"
+];
+
+const DOCS_WRITE_ALLOWED_GLOBS = ["docs/**", "README.md"];
+const DOCS_WRITE_DENIED_GLOBS = [
+  ".git/**",
+  ".env",
+  ".env.*",
+  "**/*.pem",
+  "**/*.key",
+  "**/*.p12",
+  "**/*.pfx",
+  "src/**",
+  "include/**",
+  "tests/**",
+  "test/**",
+  "bench/**",
+  "benchmark/**",
+  "tools/**",
+  "scripts/**",
+  "profiles/**",
+  "CMakeLists.txt",
+  "**/CMakeLists.txt",
+  "*.cmake",
+  "**/*.cmake",
+  "*.c",
+  "**/*.c",
+  "*.cc",
+  "**/*.cc",
+  "*.cpp",
+  "**/*.cpp",
+  "*.cxx",
+  "**/*.cxx",
+  "*.h",
+  "**/*.h",
+  "*.hh",
+  "**/*.hh",
+  "*.hpp",
+  "**/*.hpp",
+  "*.hxx",
+  "**/*.hxx",
+  "*.cu",
+  "**/*.cu",
+  "*.cuh",
+  "**/*.cuh",
+  "*.py",
+  "**/*.py",
+  "*.ts",
+  "**/*.ts",
+  "*.tsx",
+  "**/*.tsx",
+  "*.js",
+  "**/*.js",
+  "*.jsx",
+  "**/*.jsx",
+  "*.mjs",
+  "**/*.mjs",
+  "*.cjs",
+  "**/*.cjs",
+  "node_modules/**",
+  "**/node_modules/**",
+  "dist/**",
+  "**/dist/**",
+  "build/**",
+  "**/build/**",
+  "out/**",
+  "**/out/**",
+  "coverage/**",
+  "**/coverage/**",
+  ".cache/**",
+  "**/.cache/**",
+  ".pytest_cache/**",
+  "**/.pytest_cache/**",
+  "__pycache__/**",
+  "**/__pycache__/**"
 ];
 
 main().catch((error) => {
@@ -254,7 +339,7 @@ async function setup(options) {
   const healthAddr = String(options.healthListenAddr ?? env.HEALTH_LISTEN_ADDR ?? DEFAULT_HEALTH_ADDR);
 
   await ensureExecutable(bin, "tunnel-client");
-  await writeReadOnlyConfig(configPath, repoRoot, repoId, displayName);
+  await writeDocsWriterConfig(configPath, repoRoot, repoId, displayName);
   await upsertEnv({
     TUNNEL_CLIENT_BIN: bin,
     TUNNEL_CLIENT_PROFILE: profile,
@@ -273,7 +358,7 @@ async function setup(options) {
     console.log("WARNING: .env does not contain CONTROL_PLANE_API_KEY. Add it before running start.");
   }
 
-  console.log(`Configured read-only repo ${repoId} at ${repoRoot}`);
+  console.log(`Configured docs-writer repo ${repoId} at ${repoRoot}`);
   console.log(`Configured tunnel profile ${profile} at ${join(profileDir, `${profile}.yaml`)}`);
 }
 
@@ -645,17 +730,17 @@ function printChatGptInstructions() {
   Tunnel: select the configured tunnel_...
   Authentication: No Authentication
 
-Enable these tools first:
-  ${READ_ONLY_TOOLS.join("\n  ")}
+Enable these tools:
+  ${ENABLED_TOOLS.join("\n  ")}
 
-Disable these tools first:
+Disable these tools:
   ${DISABLE_TOOLS.join("\n  ")}
 
 Starter prompt:
-  Use GPT Repo MCP only. You are my planner. Do not write files. Do not use repo_search or repo_git_diff. First call repo_list_roots, then use repo_tree and repo_fetch_file only for files I ask you to inspect. Produce an implementation plan for Codex.`);
+  Use GPT Repo MCP only. You are my repository planner and documentation writer. Read with repo_project_brief, repo_tree, repo_search, repo_symbols, repo_outline_file, and repo_fetch_region. Write only durable docs under docs/** or README.md with repo_write_file or repo_write_changes, then review with repo_git_status and repo_git_diff. Never stage, commit, restore, clean up files, create external-agent tasks, or write source files.`);
 }
 
-async function writeReadOnlyConfig(configPath, repoRoot, repoId, displayName) {
+async function writeDocsWriterConfig(configPath, repoRoot, repoId, displayName) {
   const base = await readJson(configPath).catch(async () => readJson(resolve(ROOT, "config.example.json")));
   const document = {
     repos: [
@@ -663,7 +748,12 @@ async function writeReadOnlyConfig(configPath, repoRoot, repoId, displayName) {
         repo_id: repoId,
         display_name: displayName,
         root: repoRoot,
-        writes: { enabled: false },
+        writes: {
+          enabled: true,
+          allowed_globs: DOCS_WRITE_ALLOWED_GLOBS,
+          denied_globs: DOCS_WRITE_DENIED_GLOBS,
+          max_bytes_per_write: 1048576
+        },
         operations: { enabled: false }
       }
     ],

@@ -2,9 +2,9 @@ export const descriptions = {
   repo_list_roots:
     "Use this when the user asks which approved repositories are available. Does not read file contents.",
   repo_policy_explain:
-    "Use this when a read, write, or cleanup policy question is blocked or the user asks what ChatGPT can access in a repo. Explains effective read/write/cleanup policy, local git operation toggles, matched globs, block reasons, and next steps without reading or mutating files.",
+    "Use this when a read or documentation-write policy question is blocked or the user asks what ChatGPT can access in a repo. Explains effective policy, matched globs, block reasons, and next steps without reading or mutating files.",
   repo_last_write:
-    "Use this when the user asks what the last write operation changed or how to continue review/recovery after a previous write. Reads safe local receipt metadata only and never mutates files or git.",
+    "Use this when the user asks what the last documentation write operation changed. Reads safe local receipt metadata only and never mutates files or git.",
   repo_tree:
     "Use this when the user asks to inspect repository structure or locate likely files by directory. Supports tree_mode source_only/docs_only/tests_only/all plus include_globs and exclude_globs. Do not use this when the user asks to read file contents.",
   repo_index_summary:
@@ -28,7 +28,7 @@ export const descriptions = {
   repo_changed_since:
     "Use this when the user has a previous repo_index_summary index_id and asks what changed since that repository index snapshot.",
   repo_git_diff:
-    "Use this when the user asks to review changes or inspect a git diff. Default first call should pass only repo_id. Do not include staged, unstaged, paths, max_bytes, or context_lines on the first pass. Use optional filters only after the default diff is truncated, too broad, or the user asks for a specific comparison.",
+    "Use this when the user asks to review changes or inspect a git diff after documentation writes. Default first call should pass only repo_id. Use optional filters only after the default diff is truncated, too broad, or the user asks for a specific comparison.",
   repo_git_review:
     "Use this when the user asks to review current git changes, recover bad write-tool edits, clean up generated artifacts, prepare staging, or plan a local commit without mutating anything. Workflow hub that returns status, diff summary, warnings, and ready-to-run composite payloads for repo_write_stage_commit and repo_write_recover plus low-level fallback payloads.",
   repo_git_stage:
@@ -70,9 +70,9 @@ export const descriptions = {
   repo_codex_review:
     "Use this when Codex has finished or the user asks to review a repo-local Codex run. Reads .chatgpt/codex-runs/<run_id>/RESULT.md and git diff review state without mutating files or git.",
   repo_write_file:
-    "Use this when the user explicitly asks to write or precisely edit one allowed repository file. Primary low-friction single-file writer/editor for docs, notes, prompts, and focused code edits; requires user approval, repo opt-in, and never runs shell, git, or Codex.",
+    "Use this when the user explicitly asks to write or precisely edit one allowed documentation file. Primary single-file writer/editor for docs/** and README.md; requires user approval, repo opt-in, and never runs shell, git, or Codex.",
   repo_write_changes:
-    "Use this when the user explicitly asks to apply a cohesive multi-file edit pack to allowed repository files. Primary low-friction multi-file writer/editor for full-file writes and exact-match edits; requires user approval, repo opt-in, and never runs shell, git, stage, commit, or restore.",
+    "Use this when the user explicitly asks to apply a cohesive multi-file documentation edit pack. Primary docs/** and README.md edit-pack writer for full-file writes and exact-match edits; requires user approval, repo opt-in, and never runs shell, git, stage, commit, or restore.",
   repo_write_handoff:
     "Use this when the user asks for a local-only ChatGPT handoff: skapa handoff, create handoff, skriv handoff, session handoff, resume note, fortsättningsanteckning, ny chatt context, or överlämning till nästa chatt. Creates .chatgpt/handoffs/*.local.md and updates current.local.md; never stages, commits, pushes, resets, checks out, or runs shell commands."
 } as const;

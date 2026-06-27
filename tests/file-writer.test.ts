@@ -13,23 +13,23 @@ describe("FileWriter", () => {
     const writer = createWriter(fixture.root, { enabled: true });
 
     const result = await writer.write({
-      path: ".chatgpt/notes.md",
+      path: "docs/notes.md",
       content: "# Notes\n",
       create_dirs: true
     });
 
     expect(result).toMatchObject({
       ok: true,
-      path: ".chatgpt/notes.md",
+      path: "docs/notes.md",
       action: "write",
       dry_run: false,
       changed: true,
       created: true,
       bytes_written: Buffer.byteLength("# Notes\n"),
-      summary: "Created .chatgpt/notes.md.",
+      summary: "Created docs/notes.md.",
       warnings: []
     });
-    await expect(readFile(join(fixture.root, ".chatgpt", "notes.md"), "utf8")).resolves.toBe("# Notes\n");
+    await expect(readFile(join(fixture.root, "docs", "notes.md"), "utf8")).resolves.toBe("# Notes\n");
   });
 
   test("write overwrites existing file without expected_sha256", async () => {
@@ -268,7 +268,7 @@ describe("FileWriter", () => {
     })).rejects.toMatchObject({ code: "SECRET_CANDIDATE_BLOCKED" });
   });
 
-  test("legitimate secret and credential filenames are allowed when policy allows them", async () => {
+  test("documentation secret terminology is allowed but source credential paths are denied", async () => {
     const fixture = await createRepoFixture();
     const writer = createWriter(fixture.root, { enabled: true, allowed_globs: ["**"] });
 
@@ -276,14 +276,13 @@ describe("FileWriter", () => {
       path: "docs/secret-plan.md",
       content: "not secret\n"
     });
-    await writer.write({
+    await expect(writer.write({
       path: "src/auth/credentialStore.ts",
       content: "export const store = 'placeholder';\n",
       create_dirs: true
-    });
+    })).rejects.toMatchObject({ code: "WRITE_DENIED_GLOB" });
 
     await expect(readFile(join(fixture.root, "docs", "secret-plan.md"), "utf8")).resolves.toBe("not secret\n");
-    await expect(readFile(join(fixture.root, "src", "auth", "credentialStore.ts"), "utf8")).resolves.toContain("placeholder");
   });
 
   test("denied glob rejected", async () => {
@@ -315,26 +314,18 @@ describe("FileWriter", () => {
     }
   });
 
-  test("default enabled policy allows exact root public docs", async () => {
+  test("default enabled policy allows docs and README only", async () => {
     const fixture = await createRepoFixture();
     const writer = createWriter(fixture.root, { enabled: true });
 
-    const publicDocs = [
-      "README.md",
-      "CHANGELOG.md",
-      "CONTRIBUTING.md",
-      "SECURITY.md",
-      "CODE_OF_CONDUCT.md",
-      "SUPPORT.md",
-      "LICENSE"
-    ];
+    await writer.write({ path: "README.md", content: "README.md\n" });
+    await writer.write({ path: "docs/research/test.md", content: "research\n", create_dirs: true });
 
-    for (const path of publicDocs) {
-      await writer.write({
-        path,
-        content: `${path}\n`
-      });
-      await expect(readFile(join(fixture.root, path), "utf8")).resolves.toBe(`${path}\n`);
+    await expect(readFile(join(fixture.root, "README.md"), "utf8")).resolves.toBe("README.md\n");
+    await expect(readFile(join(fixture.root, "docs", "research", "test.md"), "utf8")).resolves.toBe("research\n");
+
+    for (const path of ["CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "CODE_OF_CONDUCT.md", "SUPPORT.md", "LICENSE"]) {
+      await expect(writer.write({ path, content: `${path}\n` })).rejects.toMatchObject({ code: "WRITE_NOT_ALLOWED_GLOB" });
     }
   });
 
@@ -350,7 +341,7 @@ describe("FileWriter", () => {
       path: "scripts/foo.mjs",
       content: "export {};\n",
       create_dirs: true
-    })).rejects.toMatchObject({ code: "WRITE_NOT_ALLOWED_GLOB" });
+    })).rejects.toMatchObject({ code: "WRITE_DENIED_GLOB" });
     await expect(writer.write({
       path: "TODO.md",
       content: "# Todo\n"
@@ -359,6 +350,28 @@ describe("FileWriter", () => {
       path: ".env.example",
       content: "EXAMPLE=value\n"
     })).rejects.toMatchObject({ code: "WRITE_DENIED_GLOB" });
+  });
+
+  test("docs-only policy denies source, build, and secret-like targets", async () => {
+    const fixture = await createRepoFixture();
+    const writer = createWriter(fixture.root, { enabled: true, allowed_globs: ["**"] });
+    const deniedPaths = [
+      "src/app.ts",
+      "include/a.h",
+      "tests/a.test.ts",
+      "tools/x.py",
+      "CMakeLists.txt",
+      ".env",
+      "docs/key.pem"
+    ];
+
+    for (const path of deniedPaths) {
+      await expect(writer.write({
+        path,
+        content: "blocked\n",
+        create_dirs: true
+      })).rejects.toMatchObject({ code: "WRITE_DENIED_GLOB" });
+    }
   });
 
   test("path traversal rejected", async () => {
@@ -404,26 +417,24 @@ describe("FileWriter", () => {
     })).rejects.toMatchObject({ code: "BINARY_FILE_REJECTED" });
   });
 
-  test("source file write works when policy allows src/**", async () => {
+  test("source file write is rejected even when policy allows src/**", async () => {
     const fixture = await createRepoFixture();
     const writer = createWriter(fixture.root, { enabled: true, allowed_globs: ["src/**"] });
 
-    await writer.write({
+    await expect(writer.write({
       path: "src/app.ts",
       content: "export const changed = true;\n"
-    });
-
-    await expect(readFile(join(fixture.root, "src", "app.ts"), "utf8")).resolves.toBe("export const changed = true;\n");
+    })).rejects.toMatchObject({ code: "WRITE_DENIED_GLOB" });
   });
 
-  test("source file write is rejected when policy only allows docs/.chatgpt/.codex", async () => {
+  test("source file write is rejected by default docs-only policy", async () => {
     const fixture = await createRepoFixture();
     const writer = createWriter(fixture.root, { enabled: true });
 
     await expect(writer.write({
       path: "src/app.ts",
       content: "export const changed = true;\n"
-    })).rejects.toMatchObject({ code: "WRITE_NOT_ALLOWED_GLOB" });
+    })).rejects.toMatchObject({ code: "WRITE_DENIED_GLOB" });
   });
 });
 

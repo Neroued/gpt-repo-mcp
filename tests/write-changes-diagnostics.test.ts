@@ -19,7 +19,7 @@ describe("WriteChangesService diagnostics", () => {
       code: "PATH_TRAVERSAL_REJECTED",
       diagnostics: {
         applied_paths: ["docs/applied-a.md"],
-        recovery_hint: expect.stringContaining("repo_git_review")
+        recovery_hint: expect.stringContaining("repo_git_status")
       }
     });
   });

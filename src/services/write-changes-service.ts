@@ -4,15 +4,15 @@ import { FileWriter } from "./file-writer.js";
 import { PathSandbox, validateRepoPath } from "./path-sandbox.js";
 import { WritePolicy } from "./write-policy.js";
 
-const MAX_CHANGES_PER_PACK = 25;
+const MAX_CHANGES_PER_PACK = 10;
 const MAX_TOTAL_CHANGE_CONTENT_BYTES = 5 * 1024 * 1024;
 const NEXT_STEPS = [
-  "Run repo_git_review to inspect the resulting diff.",
-  "If the edit pack is wrong, use git recovery/restore workflow before committing.",
-  "If the diff is good, use repo_write_stage and repo_write_commit."
+  "Run repo_git_status to see changed files.",
+  "Run repo_git_diff to inspect the resulting documentation diff.",
+  "If the edit pack is wrong, recover manually with your local git tools."
 ];
 const PARTIAL_FAILURE_RECOVERY_HINT =
-  "Run repo_git_review, then use repo_git_restore_paths for tracked applied paths or repo_cleanup_paths for generated untracked artifacts.";
+  "Run repo_git_status and repo_git_diff, then recover manually with your local git tools.";
 
 export class WriteChangesService {
   private readonly writer: FileWriter;

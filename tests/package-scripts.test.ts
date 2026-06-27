@@ -180,7 +180,7 @@ describe("package startup scripts", () => {
     for (const doc of [readme, setup]) {
       expect(doc).not.toContain("`npm run add -- <path> --mode read|write|ship`");
       expect(doc).toContain("`npm run add -- <path> --mode <mode>`");
-      expect(doc).toContain("explicit `read`, `write`, or `ship` mode");
+      expect(doc).toContain("explicit `read` or `write` mode");
     }
   });
 });

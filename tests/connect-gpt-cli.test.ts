@@ -202,7 +202,7 @@ describe("connect-gpt config CLI", () => {
     expect(written.repos[0]?.operations?.enabled).toBe(false);
   });
 
-  test("add --mode write enables practical solo-dev write policy without operations", async () => {
+  test("add --mode write enables docs-only write policy without operations", async () => {
     const sandbox = await mkdtemp(join(tmpdir(), "connect-gpt-cli-"));
     const configPath = join(sandbox, "config.local.json");
     const repoRoot = join(sandbox, "repo");
@@ -220,9 +220,17 @@ describe("connect-gpt config CLI", () => {
     };
     const repo = written.repos[0];
     expect(repo?.writes?.enabled).toBe(true);
-    expect(repo?.writes?.allowed_globs).toEqual(["**"]);
+    expect(repo?.writes?.allowed_globs).toEqual(["docs/**", "README.md"]);
     expect(repo?.writes?.denied_globs).toContain(".env.*");
     expect(repo?.writes?.denied_globs).toContain(".git/**");
+    expect(repo?.writes?.denied_globs).toContain("src/**");
+    expect(repo?.writes?.denied_globs).toContain("include/**");
+    expect(repo?.writes?.denied_globs).toContain("tests/**");
+    expect(repo?.writes?.denied_globs).toContain("tools/**");
+    expect(repo?.writes?.denied_globs).toContain("CMakeLists.txt");
+    expect(repo?.writes?.denied_globs).toContain("**/*.cpp");
+    expect(repo?.writes?.denied_globs).toContain("**/*.cu");
+    expect(repo?.writes?.denied_globs).toContain("**/*.py");
     expect(repo?.writes?.denied_globs).toContain("node_modules/**");
     expect(repo?.writes?.denied_globs).toContain("**/node_modules/**");
     expect(repo?.writes?.denied_globs).toContain("**/dist/**");
@@ -231,35 +239,15 @@ describe("connect-gpt config CLI", () => {
     expect(repo?.operations?.enabled).toBe(false);
   });
 
-  test("add --ship enables write policy and local git operations", async () => {
+  test("add --ship is rejected because local git operations are outside this tool surface", async () => {
     const sandbox = await mkdtemp(join(tmpdir(), "connect-gpt-cli-"));
     const configPath = join(sandbox, "config.local.json");
     const repoRoot = join(sandbox, "repo");
     await mkdir(join(repoRoot, ".git"), { recursive: true });
 
     const added = await runCli(["add", repoRoot, "--id", "repo", "--ship", "--config", configPath], sandbox);
-    expect(added.code).toBe(0);
-    expect(added.stdout).toContain("mode=ship");
-
-    const written = JSON.parse(await readFile(configPath, "utf8")) as {
-      repos: Array<{
-        writes?: { enabled?: boolean };
-        operations?: {
-          enabled?: boolean;
-          git_stage_enabled?: boolean;
-          git_commit_enabled?: boolean;
-          cleanup_enabled?: boolean;
-        };
-      }>;
-    };
-    const repo = written.repos[0];
-    expect(repo?.writes?.enabled).toBe(true);
-    expect(repo?.operations).toMatchObject({
-      enabled: true,
-      git_stage_enabled: true,
-      git_commit_enabled: true,
-      cleanup_enabled: true
-    });
+    expect(added.code).toBe(1);
+    expect(added.stderr).toContain("Mode \"ship\" has been removed");
   });
 
   test("rejects duplicate repo_id during add", async () => {

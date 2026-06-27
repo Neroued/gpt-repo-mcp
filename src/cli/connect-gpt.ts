@@ -7,7 +7,6 @@ import { createInterface } from "node:readline/promises";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { DEFAULT_OPERATIONS_POLICY } from "../policies/operations-defaults.js";
 import { DEFAULT_WRITE_POLICY } from "../policies/write-defaults.js";
 import {
   loadConfig,
@@ -41,13 +40,13 @@ type AddOptions = {
   path?: string;
 };
 
-type PermissionMode = "read" | "write" | "ship";
+type PermissionMode = "read" | "write";
 
 const usage = [
   "Usage:",
   "  gpt-repo doctor [--config <path>]",
   "  gpt-repo list [--config <path>]",
-  "  gpt-repo add <path> [--mode read|write|ship] [--id <repo_id>] [--name <display_name>] [--allow-non-git] [--config <path>]",
+  "  gpt-repo add <path> [--mode read|write] [--id <repo_id>] [--name <display_name>] [--allow-non-git] [--config <path>]",
   "  gpt-repo remove <repo_id> [--config <path>]",
   "  gpt-repo check [--config <path>]",
   "",
@@ -461,10 +460,13 @@ function parseAddArgs(args: string[]): AddOptions {
 }
 
 function parsePermissionMode(value: string): PermissionMode {
-  if (value === "read" || value === "write" || value === "ship") {
+  if (value === "read" || value === "write") {
     return value;
   }
-  throw new CliError(`Invalid mode "${value}". Use read, write, or ship.`);
+  if (value === "ship") {
+    throw new CliError("Mode \"ship\" has been removed. Use mode \"write\" for docs-only writing and run git operations manually.");
+  }
+  throw new CliError(`Invalid mode "${value}". Use read or write.`);
 }
 
 async function resolvePermissionMode(options: AddOptions, io: CliIo): Promise<PermissionMode> {
@@ -474,7 +476,7 @@ async function resolvePermissionMode(options: AddOptions, io: CliIo): Promise<Pe
   if (io.stdin?.isTTY) {
     const rl = createInterface({ input: io.stdin, output: process.stdout });
     try {
-      const answer = await rl.question("Permission mode? [read/write/ship] (read): ");
+      const answer = await rl.question("Permission mode? [read/write] (read): ");
       const normalized = answer.trim().toLowerCase();
       return normalized ? parsePermissionMode(normalized) : "read";
     } finally {
@@ -483,8 +485,6 @@ async function resolvePermissionMode(options: AddOptions, io: CliIo): Promise<Pe
   }
   return "read";
 }
-
-const SOLO_DEV_ALLOWED_GLOBS = ["**"];
 
 function createModeConfig(mode: PermissionMode) {
   if (mode === "read") {
@@ -496,18 +496,9 @@ function createModeConfig(mode: PermissionMode) {
 
   const writes = {
     ...DEFAULT_WRITE_POLICY,
-    enabled: true,
-    allowed_globs: SOLO_DEV_ALLOWED_GLOBS
+    enabled: true
   };
-  const operations = mode === "ship"
-    ? {
-        ...DEFAULT_OPERATIONS_POLICY,
-        enabled: true,
-        git_stage_enabled: true,
-        git_commit_enabled: true,
-        cleanup_enabled: true
-      }
-    : { enabled: false };
+  const operations = { enabled: false };
 
   return { writes, operations };
 }

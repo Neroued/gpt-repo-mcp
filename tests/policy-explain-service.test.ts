@@ -3,14 +3,14 @@ import { DEFAULT_WRITE_POLICY } from "../src/policies/write-defaults.js";
 import { PolicyExplainService } from "../src/services/policy-explain-service.js";
 
 describe("PolicyExplainService", () => {
-  test("explains broad solo-dev writes with hard denied paths", () => {
+  test("explains docs-only writes with hard denied paths", () => {
     const service = new PolicyExplainService({
       repo_id: "demo",
       display_name: "Demo",
       root: "/repo",
       writes: {
         enabled: true,
-        allowed_globs: ["**"],
+        allowed_globs: DEFAULT_WRITE_POLICY.allowed_globs,
         denied_globs: DEFAULT_WRITE_POLICY.denied_globs,
         max_bytes_per_write: 1048576
       },
@@ -24,13 +24,19 @@ describe("PolicyExplainService", () => {
       }
     });
 
-    const appPath = service.explain({ path: "app/page.tsx", operation: "write" });
-    expect(appPath.write).toMatchObject({
+    const docsPath = service.explain({ path: "docs/research/notes.md", operation: "write" });
+    expect(docsPath.write).toMatchObject({
       allowed: true,
       code: "ALLOWED",
-      matched_globs: ["**"]
+      matched_globs: ["docs/**"]
     });
-    expect(appPath.summary).toContain("write policy for app/page.tsx");
+    expect(docsPath.summary).toContain("write policy for docs/research/notes.md");
+
+    const appPath = service.explain({ path: "app/page.tsx", operation: "write" });
+    expect(appPath.write).toMatchObject({
+      allowed: false,
+      code: "WRITE_DENIED_GLOB"
+    });
 
     const envPath = service.explain({ path: ".env.local", operation: "write" });
     expect(envPath.write).toMatchObject({
@@ -112,7 +118,7 @@ describe("PolicyExplainService", () => {
       allowed: false,
       code: "OPERATIONS_DISABLED"
     });
-    expect(result.guidance).toContain("Use --mode ship for trusted repositories when local stage, commit, recover, and cleanup operations should be enabled.");
+    expect(result.guidance).toContain("Local operations are disabled in the default MCP surface; inspect with repo_git_status and repo_git_diff, then use local git manually if recovery or commits are needed.");
   });
 
   test("explains cleanup allowed globs and tracked-file caveat", () => {

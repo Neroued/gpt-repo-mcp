@@ -9,7 +9,8 @@ This runbook is for the local WSL deployment where ChatGPT Developer Mode reache
 - The tunnel client opens an outbound HTTPS connection to OpenAI.
 - ChatGPT connector authentication should be `No Authentication`.
 - The runtime key belongs in `.env` as `CONTROL_PLANE_API_KEY`; never paste it into ChatGPT.
-- Keep repositories in `read` mode unless you intentionally want ChatGPT write access.
+- Default repository setup is docs-writer mode: read/search/git-status/git-diff plus writes only to `docs/**` and `README.md`.
+- Source edits, staging, commits, restore, cleanup, shell commands, and arbitrary git operations are outside the default MCP surface.
 
 ## Files
 
@@ -50,7 +51,7 @@ Required `.env` value:
 CONTROL_PLANE_API_KEY=sk-...
 ```
 
-Configure one read-only repository and the Secure MCP Tunnel profile:
+Configure one docs-writer repository and the Secure MCP Tunnel profile:
 
 ```bash
 npm run secure:tunnel -- setup \
@@ -58,7 +59,7 @@ npm run secure:tunnel -- setup \
   --tunnel-id "tunnel_..."
 ```
 
-The setup command writes a single read-only repo entry to `config.local.json`, updates non-secret `.env` settings, and creates the local `gpt-repo-local` tunnel profile.
+The setup command writes a single repo entry to `config.local.json`, updates non-secret `.env` settings, and creates the local `gpt-repo-local` tunnel profile. The repo entry has `writes.enabled=true`, `allowed_globs=["docs/**","README.md"]`, expanded source/secret/generated deny globs, and `operations.enabled=false`.
 
 ## Daily Commands
 
@@ -161,53 +162,35 @@ Authentication: No Authentication
 
 Select the tunnel created in OpenAI Platform, then refresh metadata.
 
-Start with only these tools enabled:
+The default visible tools should be exactly:
 
 ```text
 repo_list_roots
-repo_policy_explain
-repo_tree
+repo_project_brief
 repo_index_summary
-repo_symbols
-repo_search
-repo_search_symbol
-repo_outline_file
+repo_tree
+repo_read_many
 repo_fetch_file
 repo_fetch_region
-repo_read_many
-repo_project_brief
-repo_change_plan
-repo_plan_review
-repo_prepare_codex_task
-repo_codex_review
-repo_next_action
-```
-
-Disable these first:
-
-```text
+repo_outline_file
+repo_search
+repo_search_symbol
+repo_symbols
+repo_task_inventory
+repo_changed_since
+repo_decision_memory
+repo_git_status
 repo_git_diff
-repo_git_review
-repo_git_stage
-repo_git_unstage
-repo_git_restore_paths
-repo_git_commit
-repo_write_stage
-repo_write_unstage
-repo_write_commit
-repo_write_stage_commit
-repo_write_recover
-repo_cleanup_paths
-repo_write_codex_task
+repo_last_write
 repo_write_file
 repo_write_changes
-repo_write_handoff
+repo_policy_explain
 ```
 
 Starter prompt:
 
 ```text
-Use GPT Repo MCP only. You are my planner. Do not write files. First call repo_list_roots, then repo_project_brief, then repo_tree with tree_mode source_only and max_depth 3. Use repo_outline_file, repo_search_symbol, and repo_fetch_region before fetching large files. Produce an implementation plan for Codex.
+Use GPT Repo MCP only. You are my repository planner and documentation writer. First call repo_list_roots, then repo_project_brief, then repo_tree with tree_mode source_only and max_depth 3. Use repo_outline_file, repo_search_symbol, and repo_fetch_region before fetching large files. Write only durable docs under docs/** or README.md, then inspect with repo_git_status and repo_git_diff.
 ```
 
 ## Notes

@@ -97,7 +97,7 @@ export class PolicyExplainService {
     if (!path) {
       return policy.config.enabled
         ? allowed("GENERAL_WRITE_POLICY", "Writes are enabled for this repository and are constrained by allowed globs, denied globs, hard secret paths, resulting-content secret scans, and size limits.", policy.config.allowed_globs, [])
-        : blocked("WRITE_DISABLED", "Writes are disabled for this repository.", [], ["Use npm run add -- <path> --mode write or --mode ship, or enable writes in config.local.json for trusted repositories."]);
+        : blocked("WRITE_DISABLED", "Writes are disabled for this repository.", [], ["Use npm run add -- <path> --mode write, or enable docs-only writes in config.local.json for trusted repositories."]);
     }
     if (pathError) {
       return blocked(pathError.code, pathError.message, [], ["Use repo-relative POSIX paths only."]);
@@ -114,7 +114,7 @@ export class PolicyExplainService {
   private explainCleanup(path: string | undefined, pathError: RepoReaderError | undefined, policy: OperationsPolicy): Decision {
     if (!path) {
       if (!policy.config.enabled) {
-        return blocked("OPERATIONS_DISABLED", "Local operations are disabled for this repository.", [], ["Use --mode ship for trusted repositories when local stage, commit, recover, and cleanup should be available."]);
+        return blocked("OPERATIONS_DISABLED", "Local operations are disabled for this repository.", [], ["Use local git manually for staging, commits, restore, and cleanup. The default MCP surface exposes only read-only git status and diff."]);
       }
       if (!policy.config.cleanup_enabled) {
         return blocked("CLEANUP_DISABLED", "Cleanup operations are disabled for this repository.", [], []);
@@ -168,13 +168,13 @@ function blocked(code: string, reason: string, matchedGlobs: string[], notes: st
 
 function writeNotes(code: string): string[] {
   if (code === "WRITE_DISABLED") {
-    return ["Use npm run add -- <path> --mode write or --mode ship for trusted repositories."];
+    return ["Use npm run add -- <path> --mode write for docs-only writes, or enable writes in config.local.json with allowed_globs limited to docs/** and README.md."];
   }
   if (code === "WRITE_DENIED_GLOB" || code === "SECRET_CANDIDATE_BLOCKED") {
     return ["Denied globs and hard secret path checks win over allowed globs."];
   }
   if (code === "WRITE_NOT_ALLOWED_GLOB") {
-    return ["For clone-based solo-dev setup, --mode write and --mode ship use a broad write policy with hard denies."];
+    return ["Default write mode allows only docs/** and README.md. Denied source, secret, generated, and build paths remain blocked even when allowed globs are customized."];
   }
   return [];
 }
@@ -212,7 +212,7 @@ function guidance(path: string | undefined, read: Decision, write: Decision, cle
     items.push(`For cleanup failures, check cleanup.code=${cleanup.code}; cleanup only deletes explicit untracked paths matching cleanup_allowed_globs.`);
   }
   if (!operationsEnabled) {
-    items.push("Use --mode ship for trusted repositories when local stage, commit, recover, and cleanup operations should be enabled.");
+    items.push("Local operations are disabled in the default MCP surface; inspect with repo_git_status and repo_git_diff, then use local git manually if recovery or commits are needed.");
   }
   return items;
 }

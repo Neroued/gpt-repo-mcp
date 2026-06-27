@@ -59,7 +59,8 @@ export class OperationReceiptService {
         found: true,
         receipt: parsed.data,
         next_tool_payloads: {
-          repo_git_review: { repo_id: repoId }
+          repo_git_status: { repo_id: repoId },
+          repo_git_diff: { repo_id: repoId }
         },
         warnings: []
       });

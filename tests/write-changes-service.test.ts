@@ -31,9 +31,9 @@ describe("WriteChangesService", () => {
       summary: "Applied 2 changes across 2 files.",
       warnings: [],
       next_steps: [
-        "Run repo_git_review to inspect the resulting diff.",
-        "If the edit pack is wrong, use git recovery/restore workflow before committing.",
-        "If the diff is good, use repo_write_stage and repo_write_commit."
+        "Run repo_git_status to see changed files.",
+        "Run repo_git_diff to inspect the resulting documentation diff.",
+        "If the edit pack is wrong, recover manually with your local git tools."
       ]
     });
     expect(result.files.map((file) => ({
@@ -51,7 +51,7 @@ describe("WriteChangesService", () => {
 
   test("mixes write append and replace", async () => {
     const fixture = await createRepoFixture();
-    const service = createService(fixture.root, { enabled: true, allowed_globs: ["docs/**", "src/**"] });
+    const service = createService(fixture.root, { enabled: true, allowed_globs: ["docs/**", "src/**"], denied_globs: [] });
 
     const result = await service.apply({
       changes: [
@@ -70,7 +70,7 @@ describe("WriteChangesService", () => {
 
   test("grouped edit applies two replacements to one file result", async () => {
     const fixture = await createRepoFixture();
-    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"] });
+    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"], denied_globs: [] });
 
     const result = await service.apply({
       changes: [
@@ -105,7 +105,7 @@ describe("WriteChangesService", () => {
 
   test("grouped edit applies replace insert_before and insert_after in order", async () => {
     const fixture = await createRepoFixture();
-    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"] });
+    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"], denied_globs: [] });
 
     await service.apply({
       changes: [
@@ -202,7 +202,7 @@ describe("WriteChangesService", () => {
 
   test("grouped edit requires find", async () => {
     const fixture = await createRepoFixture();
-    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"] });
+    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"], denied_globs: [] });
 
     await expect(service.apply({
       changes: [
@@ -217,7 +217,7 @@ describe("WriteChangesService", () => {
 
   test("grouped edit requires replace or content", async () => {
     const fixture = await createRepoFixture();
-    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"] });
+    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"], denied_globs: [] });
 
     await expect(service.apply({
       changes: [
@@ -235,7 +235,7 @@ describe("WriteChangesService", () => {
 
   test("grouped edit find not found does not write target", async () => {
     const fixture = await createRepoFixture();
-    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"] });
+    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"], denied_globs: [] });
 
     await expect(service.apply({
       changes: [
@@ -282,7 +282,7 @@ describe("WriteChangesService", () => {
 
   test("grouped edit missing file fails", async () => {
     const fixture = await createRepoFixture();
-    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"] });
+    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"], denied_globs: [] });
 
     await expect(service.apply({
       changes: [
@@ -313,7 +313,7 @@ describe("WriteChangesService", () => {
 
   test("grouped edit does not bypass top-level duplicate path guard", async () => {
     const fixture = await createRepoFixture();
-    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"] });
+    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"], denied_globs: [] });
 
     await expect(service.apply({
       changes: [
@@ -329,7 +329,7 @@ describe("WriteChangesService", () => {
 
   test("partial apply failure reports applied paths failed path and recovery hint", async () => {
     const fixture = await createRepoFixture();
-    const service = createService(fixture.root, { enabled: true, allowed_globs: ["docs/**", "src/**"] });
+    const service = createService(fixture.root, { enabled: true, allowed_globs: ["docs/**", "src/**"], denied_globs: [] });
 
     await expect(service.apply({
       changes: [
@@ -342,7 +342,7 @@ describe("WriteChangesService", () => {
       diagnostics: {
         applied_paths: ["docs/applied-a.md", "docs/guide.md"],
         failed_path: "src/app.ts",
-        recovery_hint: expect.stringContaining("repo_git_review")
+        recovery_hint: expect.stringContaining("repo_git_status")
       }
     });
     await expect(readFile(join(fixture.root, "docs", "applied-a.md"), "utf8")).resolves.toBe("A\n");
@@ -351,7 +351,7 @@ describe("WriteChangesService", () => {
 
   test("grouped edit partial failure reports previously applied top-level paths", async () => {
     const fixture = await createRepoFixture();
-    const service = createService(fixture.root, { enabled: true, allowed_globs: ["docs/**", "src/**"] });
+    const service = createService(fixture.root, { enabled: true, allowed_globs: ["docs/**", "src/**"], denied_globs: [] });
 
     await expect(service.apply({
       changes: [
@@ -370,7 +370,7 @@ describe("WriteChangesService", () => {
       diagnostics: {
         applied_paths: ["docs/applied-a.md"],
         failed_path: "src/app.ts",
-        recovery_hint: expect.stringContaining("repo_git_review")
+        recovery_hint: expect.stringContaining("repo_git_status")
       }
     });
     await expect(readFile(join(fixture.root, "docs", "applied-a.md"), "utf8")).resolves.toBe("A\n");
@@ -394,7 +394,7 @@ describe("WriteChangesService", () => {
     const service = createService(fixture.root, { enabled: true });
 
     await expect(service.apply({
-      changes: Array.from({ length: 26 }, (_, index) => ({
+      changes: Array.from({ length: 11 }, (_, index) => ({
         type: "write",
         path: `docs/${index}.md`,
         content: `${index}\n`

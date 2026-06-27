@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "description": "Read-mostly MCP server for controlled ChatGPT access to approved local repositories with opt-in safe file and git operations.",
+  "description": "MCP server for controlled ChatGPT repository reading with opt-in docs-only writes.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/CAHN91/gpt-repo-mcp.git"

@@ -9,16 +9,16 @@ import { createRepoFixture } from "./fixtures/repo-fixture.js";
 describe("WriteChangesService polish", () => {
   test("write changes create missing parent directories", async () => {
     const fixture = await createRepoFixture();
-    const service = createService(fixture.root, { enabled: true, allowed_globs: ["src/**"] });
+    const service = createService(fixture.root, { enabled: true });
 
     const result = await service.apply({
       changes: [
-        { type: "write", path: "src/generated/client.ts", content: "export const client = true;\n" }
+        { type: "write", path: "docs/generated/client.md", content: "client docs\n" }
       ]
     });
 
-    expect(result.changed_paths).toEqual(["src/generated/client.ts"]);
-    await expect(readFile(join(fixture.root, "src", "generated", "client.ts"), "utf8")).resolves.toBe("export const client = true;\n");
+    expect(result.changed_paths).toEqual(["docs/generated/client.md"]);
+    await expect(readFile(join(fixture.root, "docs", "generated", "client.md"), "utf8")).resolves.toBe("client docs\n");
   });
 
   test("duplicate target paths are rejected", async () => {

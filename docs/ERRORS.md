@@ -13,14 +13,14 @@ All tool errors return:
     "retryable": false,
     "diagnostics": {
       "applied_paths": ["docs/example.md"],
-      "failed_path": "src/example.ts",
-      "recovery_hint": "Run repo_git_review, then use repo_git_restore_paths for tracked applied paths or repo_cleanup_paths for generated untracked artifacts."
+      "failed_path": "docs/example.md",
+      "recovery_hint": "Run repo_git_status and repo_git_diff, then recover manually with local git tools if needed."
     }
   }
 }
 ```
 
-`error.diagnostics` is optional. Some write and git-operation errors include safe machine-readable diagnostics such as repo-relative paths, HEAD SHAs, or recovery hints. Diagnostics never include file contents, snippets, raw diffs, secret values, absolute paths, environment values, raw command output, or stack traces.
+`error.diagnostics` is optional. Some write and read-only git errors include safe machine-readable diagnostics such as repo-relative paths, HEAD SHAs, or recovery hints. Diagnostics never include file contents, snippets, raw diffs, secret values, absolute paths, environment values, raw command output, or stack traces.
 
 ## Inventory
 
@@ -47,20 +47,20 @@ All tool errors return:
 | `WRITE_FIND_REQUIRED` | `find` was required for the requested exact-match edit action. |
 | `WRITE_FIND_NOT_FOUND` | The requested `find` text was not present in the target file. |
 | `WRITE_FIND_NOT_UNIQUE` | The requested `find` text appeared more than once in the target file. |
-| `OPERATIONS_DISABLED` | A git or cleanup operation was requested without `operations.enabled`. |
-| `GIT_STAGE_DISABLED` | Git stage or unstage was requested without stage operations enabled. |
-| `GIT_COMMIT_DISABLED` | Git commit was requested without commit operations enabled. |
+| `OPERATIONS_DISABLED` | A hidden local operation was requested without `operations.enabled`. |
+| `GIT_STAGE_DISABLED` | A hidden stage or unstage operation was requested without stage operations enabled. |
+| `GIT_COMMIT_DISABLED` | A hidden commit operation was requested without commit operations enabled. |
 | `GIT_HEAD_MISMATCH` | Current HEAD did not match the supplied `expected_head_sha`. |
 | `GIT_OPERATION_PATHS_REQUIRED` | A git operation requiring explicit paths received an empty path list. |
 | `GIT_OPERATION_TOO_MANY_PATHS` | A git operation exceeded `operations.max_paths_per_operation`. |
 | `GIT_OPERATION_UNSAFE_PATHSPEC` | A git pathspec was broad, shell-like, Git-internal, or otherwise unsafe. Absolute paths, traversal, `.env`, and hard-risk secret paths are also rejected by path and secret policy. |
 | `GIT_STAGED_PATHS_MISMATCH` | Actual staged paths did not exactly match `expected_staged_paths`. |
-| `GIT_NOTHING_STAGED` | Commit was requested when there were no staged changes. |
-| `GIT_COMMIT_MESSAGE_INVALID` | Commit message was empty or looked like command syntax rather than a local commit message. |
-| `CLEANUP_DISABLED` | Cleanup was requested without both `operations.enabled` and `operations.cleanup_enabled`. |
-| `CLEANUP_PATHS_REQUIRED` | Cleanup received an empty path list. |
-| `CLEANUP_UNSAFE_PATH` | Cleanup target was absolute, traversal, broad, `.git`, `.env`, secret-looking, a symlink escape, or an unsupported file type. |
-| `CLEANUP_NOT_ALLOWED_GLOB` | Cleanup target did not match `operations.cleanup_allowed_globs`. |
+| `GIT_NOTHING_STAGED` | A hidden commit operation was requested when there were no staged changes. |
+| `GIT_COMMIT_MESSAGE_INVALID` | A hidden commit message was empty or looked like command syntax rather than a local commit message. |
+| `CLEANUP_DISABLED` | A hidden cleanup operation was requested without both `operations.enabled` and `operations.cleanup_enabled`. |
+| `CLEANUP_PATHS_REQUIRED` | A hidden cleanup operation received an empty path list. |
+| `CLEANUP_UNSAFE_PATH` | A hidden cleanup target was absolute, traversal, broad, `.git`, `.env`, secret-looking, a symlink escape, or an unsupported file type. |
+| `CLEANUP_NOT_ALLOWED_GLOB` | A hidden cleanup target did not match `operations.cleanup_allowed_globs`. |
 | `VALIDATION_ERROR` | Tool input failed validation, such as invalid regex syntax or missing required read targets. |
 | `GIT_ERROR` | A git operation failed. |
 | `INTERNAL_ERROR` | An unexpected failure was sanitized before returning to the caller. |

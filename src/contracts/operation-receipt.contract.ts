@@ -36,7 +36,8 @@ export const LastWriteResultSchema = z.object({
   found: z.boolean().describe("Whether a valid last-write receipt was found."),
   receipt: OperationReceiptSchema.optional().describe("Latest safe write receipt when present."),
   next_tool_payloads: z.object({
-    repo_git_review: RepoInputSchema.optional().describe("Suggested read-only review payload for the receipt repository.")
+    repo_git_status: RepoInputSchema.optional().describe("Suggested read-only status payload for the receipt repository."),
+    repo_git_diff: RepoInputSchema.optional().describe("Suggested read-only diff payload for the receipt repository.")
   }).describe("Read-only next tool payloads derived from the receipt."),
   warnings: z.array(z.string()).describe("Stable non-fatal warnings from last-write lookup.")
 });

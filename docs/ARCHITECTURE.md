@@ -6,13 +6,13 @@ GPT Repo MCP (`gpt-repo-mcp`) is a tool-only MCP server. There is no widget in v
 
 - `src/server.ts` owns the HTTP server, `/mcp` transport, and `/health`.
 - `src/instructions.ts` contains server-wide MCP instructions for cross-tool workflows.
-- `src/register.ts` creates the MCP server and registers tools.
+- `src/register.ts` creates the MCP server and registers the default visible tool catalog.
 - `src/contracts/*` contains Zod input and output contracts.
 - `src/tools/contracts.ts` is the single tool-name to contract map.
-- `src/tools/catalog.ts` is metadata plus handler wiring only.
+- `src/tools/catalog.ts` contains all tool metadata plus `DEFAULT_VISIBLE_TOOL_NAMES`; hidden legacy tools stay wired internally but are not registered by default.
 - `src/tools/define-tool.ts` converts contract objects to MCP SDK schemas and registers metadata.
 - `src/tools/handlers.ts` contains thin adapters from tool input to services.
-- `src/services/*` contains filesystem, git, search, tree, read, write, project, task, decision, and advisory planning logic.
+- `src/services/*` contains filesystem, git, search, tree, read, write, project, task, decision, and legacy advisory logic.
 - `src/policies/*` contains shared limits, excludes, write defaults, and secret patterns.
 - `src/runtime/*` contains context, structured errors, result envelopes, and audit logging.
 
@@ -21,12 +21,24 @@ GPT Repo MCP (`gpt-repo-mcp`) is a tool-only MCP server. There is no widget in v
 The intended flow is:
 
 ```text
-contracts -> toolContracts -> catalog -> define-tool -> handlers -> services
+contracts -> toolContracts -> allToolCatalog -> visible toolCatalog -> define-tool -> handlers -> services
 ```
 
-Contracts define schemas. `toolContracts` assigns exactly one input and output contract to each tool. `catalog` adds titles, descriptions, annotations, and handlers. `define-tool` is the only layer that turns Zod objects into MCP SDK `inputSchema` and `outputSchema` shapes. Handlers resolve approved repos and call services.
+Contracts define schemas. `toolContracts` assigns exactly one input and output contract to each tool. `allToolCatalog` keeps metadata and handlers for the full internal set. `toolCatalog` is the default registered surface derived from `DEFAULT_VISIBLE_TOOL_NAMES`. `define-tool` is the only layer that turns Zod objects into MCP SDK `inputSchema` and `outputSchema` shapes.
 
-This keeps `catalog` metadata-only and prevents inline schema drift.
+This keeps tool schemas contract-first, lets hidden legacy services remain testable, and prevents old workflow tools from appearing in `tools/list`.
+
+## Default Surface
+
+The default visible surface is a repository reader plus docs writer:
+
+- repository roots, project brief, index summary, tree, many-file read, paginated file fetch, region fetch, outline, text search, symbol search, symbol listing, task inventory, changed-since, and decision memory
+- read-only git status and diff
+- last documentation write receipt
+- docs-only writes through `repo_write_file` and `repo_write_changes`
+- policy explanation
+
+The default surface does not register local git mutation, recovery, cleanup, external-agent task, resume-note, or advisory planning workflow tools.
 
 ## Data Flow
 
@@ -46,48 +58,31 @@ PathSandbox -> WritePolicy -> FileWriter
 write handlers -> OperationReceiptService
 ```
 
-`repo_write_file` has its own contract, write annotations, repo-level policy, and service. The handler only resolves `repo_id`, builds the sandbox and write policy, and delegates to `FileWriter`.
+`repo_write_file` writes or exact-match edits one allowed documentation file. `repo_write_changes` applies an ordered documentation edit pack with the same policy and exact-anchor behavior. Both inherit repo-local path validation, write policy, symlink protection, unsupported file type checks, UTF-8 edit target checks, hard secret path blocking, resulting-content secret scanning, and atomic per-file write guardrails.
 
-`repo_write_changes` is the multi-file writer and edit-pack applier. It has its own contract and handler, applies ordered changes through `FileWriter`, and inherits the same repo-local path validation, write policy, symlink, unsupported file type, UTF-8 edit target, hard-risk secret path, resulting-content secret scan, and atomic per-file write guardrails. Grouped same-file edits read one existing file, apply exact-match nested edits in memory, and write once only after every nested edit succeeds. It does not stage, commit, restore, reset, or run shell commands; Git review and recovery workflows are the safety layer after a successful edit pack.
+Default write policy is docs-only. `allowed_globs` defaults to `docs/**` and `README.md`; denied globs block source, tests, scripts, CMake, C/C++/CUDA, Python, JavaScript/TypeScript, secret-like paths, generated output, caches, profiles, and build artifacts. Denies win over allows.
 
-`OperationReceiptService` writes lightweight local receipt metadata after successful actual changed write operations and reads it through `repo_last_write`. Receipts live at `.chatgpt/operations/last-write.json`, are ignored by Git, and contain only safe metadata such as repo-relative paths, counts, timestamps, best-effort HEAD SHAs, and summaries. They do not store contents, snippets, diffs, prompts, command output, secrets, or absolute paths.
+`OperationReceiptService` writes lightweight local receipt metadata after successful actual changed documentation writes and reads it through `repo_last_write`. Receipts live at `.chatgpt/operations/last-write.json`, are ignored by Git, and contain only safe metadata such as repo-relative paths, counts, timestamps, best-effort HEAD SHAs, and summaries. They do not store contents, snippets, diffs, prompts, command output, secrets, or absolute paths.
 
-Read-only git status and diff operations are owned by `GitService`. Safe local git staging, one-call reviewed stage-and-commit, commit, and explicit worktree restore operations are separate opt-in mutating tools with their own contracts, policy checks, and service logic. Advisory services call existing factual services where practical instead of bypassing repo policy.
-
-Git recovery is separate from write tools. `repo_write_file` and `repo_write_changes` write files only. `repo_write_recover` is the reviewed composite recovery helper: after `expected_head_sha` verification it can unstage explicit paths, restore explicit tracked worktree paths, and clean explicit generated artifacts through cleanup policy in one approved call. `repo_git_restore_paths` remains the granular worktree-only restore tool with fixed `git restore -- <paths>` arguments; it does not unstage, stage, commit, reset, checkout, clean, stash, restore the whole repo, or run shell commands.
-
-`repo_git_review` remains read-only, but it is the workflow hub after write operations. It classifies changed paths and returns ready-to-run payloads for composite `repo_write_stage_commit` and `repo_write_recover` workflows, plus granular explicit worktree restore, cleanup-eligible generated untracked paths, unstage, stage, and commit operations without executing any of them. When staged paths exist, it adds guidance that granular restore is worktree-only while `repo_write_recover` can explicitly unstage and restore the same reviewed path in one approved call.
-
-The preferred high-level mutation flow is `repo_git_review` followed by the review-provided `repo_write_stage_commit` or `repo_write_recover` payload after explicit user approval. Granular tools remain available for specific requested operations, staged-only commits, troubleshooting, or cases where composite payloads are absent.
-
-## Advisory Planning Workflows
-
-The advisory tools are read-only:
-
-- Onboarding/daily planning: `repo_project_brief` -> `repo_task_inventory` -> `repo_next_action`
-- Project memory: `repo_decision_memory`
-- Implementation/refactor/debug planning: `repo_decision_memory` when conventions matter -> `repo_change_plan` -> targeted `repo_search`/`repo_fetch_file`/`repo_read_many`
-- Current-change review: `repo_git_status` -> `repo_git_diff`
-- Broad or ambiguous review: `repo_plan_review` before broad reading
-
-`repo_next_action` recommends next work; it does not execute tests. `repo_change_plan` proposes implementation steps; it does not write files.
+`GitService` owns read-only status and diff operations in the default surface. If a documentation write is wrong, users inspect with `repo_git_status` and `repo_git_diff`, then recover manually with local git outside MCP.
 
 ## Adding a Tool
 
-Add a new tool by following the contract-first path:
+Add a new default-visible tool by following the contract-first path:
 
 1. Add input and output Zod objects under `src/contracts/*`.
 2. Add the tool entry to `src/tools/contracts.ts`.
 3. Add a concise `Use this when...` description in `src/tools/descriptions.ts`.
 4. Add metadata and the handler reference in `src/tools/catalog.ts`.
-5. Add a thin handler in `src/tools/handlers.ts`.
-6. Put real logic in a service under `src/services/*`.
-7. Add service tests, MCP contract coverage, tool contract discipline tests, and golden prompts when routing changes.
+5. Add the name to `DEFAULT_VISIBLE_TOOL_NAMES` only when it belongs in the default reader/docs-writer surface.
+6. Add a thin handler in `src/tools/handlers.ts`.
+7. Put real logic in a service under `src/services/*`.
+8. Add service tests, MCP contract coverage, tool contract discipline tests, and instruction/guidance checks when routing changes.
 
 Do not duplicate path validation, ignore handling, secret scanning, schema definitions, or result envelope logic inside individual tools.
 
-## Mutating Tools
+## Mutation Rules
 
-Mutating tools are disabled by default per repository and must be enabled through explicit repo-local policy. `repo_write_file` can write or exact-match edit one file inside configured allowed globs and outside configured denied globs. `repo_write_changes` applies the same write/edit semantics to an ordered multi-file edit pack and supports grouped same-file exact-match edits without allowing duplicate top-level paths.
+Only `repo_write_file` and `repo_write_changes` are mutating in the default surface. They are documentation writers, not code writers.
 
-Mutating tools must stay separate from read tools. Do not loosen read services to support mutation, do not add shell execution, and do not add broad git automation. Safe git tools stage explicit paths, unstage explicit paths, restore explicit worktree paths, or create a local commit from an exact staged path list only after policy and HEAD checks. Cleanup tools remove only explicit generated artifacts allowed by cleanup policy.
+Mutating tools must stay separate from read tools. Do not loosen read services to support mutation, do not add shell execution, and do not add broad git automation. Any future expansion should default to hidden until contracts, policy, guidance, and MCP surface tests prove it belongs in the visible surface.

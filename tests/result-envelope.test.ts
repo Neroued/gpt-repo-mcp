@@ -28,7 +28,7 @@ describe("result envelope", () => {
       diagnostics: {
         applied_paths: ["src/a.ts", "/Users/example/repo/src/absolute.ts"],
         failed_path: "src/c.ts",
-        recovery_hint: "Run repo_git_review, then use repo_git_restore_paths for tracked applied paths or repo_cleanup_paths for generated untracked artifacts.",
+        recovery_hint: "Run repo_git_status and repo_git_diff, then recover manually with local git tools if needed.",
         content: "OPENAI_API_KEY=sk-secret",
         diff: "@@ secret",
         stack: "Error at /Users/example/repo/src/c.ts",
@@ -39,7 +39,7 @@ describe("result envelope", () => {
     expect(result.structuredContent.error.diagnostics).toEqual({
       applied_paths: ["src/a.ts"],
       failed_path: "src/c.ts",
-      recovery_hint: "Run repo_git_review, then use repo_git_restore_paths for tracked applied paths or repo_cleanup_paths for generated untracked artifacts."
+      recovery_hint: "Run repo_git_status and repo_git_diff, then recover manually with local git tools if needed."
     });
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain("OPENAI_API_KEY");

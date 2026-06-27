@@ -60,7 +60,8 @@ describe("OperationReceiptService", () => {
         summary: "Applied 2 changes across 2 files."
       },
       next_tool_payloads: {
-        repo_git_review: { repo_id: "fixture" }
+        repo_git_status: { repo_id: "fixture" },
+        repo_git_diff: { repo_id: "fixture" }
       },
       warnings: []
     });

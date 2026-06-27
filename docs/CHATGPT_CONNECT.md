@@ -93,11 +93,11 @@ Use GPT Repo MCP. Give me a project brief for <repo_id>.
 
 Replace `<repo_id>` with one of the repository ids returned by the first prompt.
 
-## Mutating Tool Confirmation
+## Docs-Write Confirmation
 
-The default setup is read-mostly. `repo_write_file`, safe git operations, and cleanup tools are disabled by default unless repo-local config opts in.
+The default setup is a repository reader plus optional docs writer. `repo_write_file` and `repo_write_changes` are disabled unless repo-local config opts in with docs-only writes.
 
-When mutating tools are enabled, ChatGPT requires confirmation for write, git, or cleanup actions unless you choose to remember approval for the conversation.
+When docs-write tools are enabled, ChatGPT requires confirmation for write actions unless you choose to remember approval for the conversation. The default visible surface does not include source edits or local git mutation tools.
 
 ## Connection Options
 

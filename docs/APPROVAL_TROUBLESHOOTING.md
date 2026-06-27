@@ -1,28 +1,15 @@
 # Approval Troubleshooting
 
-Use this checklist when a mutating tool dry-run succeeds but the actual tool call is blocked before the user sees an approval prompt.
+Use this checklist when a docs-write dry run succeeds but the actual `repo_write_file` or `repo_write_changes` call is blocked before the user sees an approval prompt.
 
 ## Checklist
 
-- Verify `tools/list` includes the mutating tools relevant to the blocked flow:
-  - `repo_write_file`
-  - `repo_write_changes`
-  - `repo_write_handoff`
-  - `repo_write_codex_task`
-  - `repo_git_restore_paths`
-  - `repo_write_stage`
-  - `repo_write_unstage`
-  - `repo_write_commit`
-  - `repo_write_stage_commit`
-  - `repo_write_recover`
-  - `repo_cleanup_paths`
-  - compatibility aliases:
-  - `repo_git_stage`
-  - `repo_git_unstage`
-  - `repo_git_commit`
+- Verify `tools/list` includes exactly the default visible surface from [TOOL_SURFACE.md](TOOL_SURFACE.md).
+- Verify the only visible mutating tools are `repo_write_file` and `repo_write_changes`.
 - Verify connector metadata was refreshed after changing tool schemas, descriptions, or server instructions.
-- Verify `src/instructions.ts` describes the app as read-mostly and does not call it read-only.
-- Verify `config.local.json` enables the relevant write or operations policy for the target repo.
+- Verify `src/instructions.ts` describes the app as a repository reader plus docs writer.
+- Verify `config.local.json` enables docs-only writes for the target repo.
+- Verify the target path is under `docs/**` or exactly `README.md`.
 - Verify the dry-run call succeeds before the actual mutation.
 - Verify the same operation works through MCP Inspector, API Playground, or a raw MCP client if available.
 
@@ -47,21 +34,14 @@ GPT_REPO_LOG_FORMAT=pretty npm run connect
 
 JSON audit logs remain the default. Pretty logs are compact one-line renderings of the same sanitized metadata.
 
-## If A Commit Tool Is Blocked Before Approval
+## Server Policy Blocks
 
-Prefer `repo_write_stage`, `repo_write_unstage`, and `repo_write_commit` in ChatGPT workflows. The `repo_git_*` tools remain compatibility aliases with the same contracts and safety checks.
+If the request reaches the server and is rejected, ask ChatGPT to call `repo_policy_explain` for the same repo id and path. Common docs-writer blocks are:
 
-1. Confirm `repo_write_commit` with `dry_run: true` passed.
-2. Confirm the intended paths are staged with `repo_git_status`.
-3. If needed, stage explicit files with `repo_write_stage`.
-4. Use the manual fallback:
+- writes are disabled for the repo
+- the path is outside `docs/**` and `README.md`
+- a denied glob wins over an allowed glob
+- the path looks like a secret, key, source file, generated artifact, build output, or cache file
+- an exact-match edit anchor is missing or appears more than once
 
-```bash
-git commit -m "<message>"
-```
-
-This indicates client-side pre-approval blocking, not necessarily a server policy failure. The server still requires repo-local operations opt-in, exact `expected_head_sha`, and exact `expected_staged_paths`, and it creates a local commit only. It does not push, pull, reset, checkout, switch, rebase, merge, stash, clean, force, delete branches, or run shell commands.
-
-## Write-Prefixed Alias Result
-
-This repo includes write-prefixed preferred names for safe local git operations: `repo_write_stage`, `repo_write_unstage`, and `repo_write_commit`. Prefer these names for ChatGPT workflows; use `repo_git_stage`, `repo_git_unstage`, and `repo_git_commit` as compatibility aliases when needed.
+After a successful docs write, inspect with `repo_git_status` and `repo_git_diff`. Recovery, commits, and other local git actions are manual outside MCP.
