@@ -3,6 +3,11 @@ import { RepoInputSchema } from "./repo.contract.js";
 
 export const GitStatusInputSchema = RepoInputSchema;
 
+export const ChangedSinceInputSchema = RepoInputSchema.extend({
+  index_id: z.string().min(1),
+  force_refresh: z.boolean().optional()
+});
+
 export const GitDiffInputSchema = RepoInputSchema.extend({
   base: z.string().optional().describe("Second-pass refinement for comparing from a specific base ref. Omit on the first diff call."),
   compare: z.string().optional().describe("Second-pass refinement for comparing to a specific ref. Omit on the first diff call."),
@@ -38,5 +43,15 @@ export const GitDiffResultSchema = z.object({
     hunks: z.array(z.string())
   })),
   truncated: z.boolean(),
+  warnings: z.array(z.string()).default([])
+});
+
+export const ChangedSinceResultSchema = z.object({
+  previous_index_id: z.string(),
+  current_index_id: z.string(),
+  changed: z.boolean(),
+  added: z.array(z.string()),
+  modified: z.array(z.string()),
+  removed: z.array(z.string()),
   warnings: z.array(z.string()).default([])
 });

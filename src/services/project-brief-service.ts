@@ -6,6 +6,7 @@ import { RepoTreeService } from "./repo-tree-service.js";
 import { GitService } from "./git-service.js";
 import { readFilePrefix } from "./bounded-read.js";
 import type { ProjectBriefInclude, ProjectBriefInput } from "../contracts/project.contract.js";
+import { RepoIndexService } from "./repo-index-service.js";
 
 const DEFAULT_INCLUDE: ProjectBriefInclude[] = ["package", "readme", "architecture", "scripts", "recent_git", "todos"];
 const MAX_DOCS = 5;
@@ -45,18 +46,29 @@ export class ProjectBriefService {
     const docs = include.has("readme") || include.has("architecture") || include.has("todos") ? await this.readKeyDocs(filePaths, include, warnings) : [];
     const recentGitWarnings = include.has("recent_git") ? await this.collectRecentGitWarnings(warnings) : [];
     warnings.push(...recentGitWarnings);
+    const indexSummary = await new RepoIndexService(this.repo.root, this.sandbox).summary();
+    warnings.push(...indexSummary.warnings);
+    const languages = displayLanguages(indexSummary.language_stats);
 
     return {
       repo: {
         repo_id: this.repo.repo_id,
         display_name: this.repo.display_name
       },
-      project_type: detectProjectType(packageJson, filePaths),
-      languages: detectLanguages(filePaths),
+      project_type: detectProjectType(packageJson, filePaths, indexSummary),
+      languages: languages.length > 0 ? languages : detectLanguages(filePaths),
       package_managers: detectPackageManagers(filePaths),
       scripts,
       key_docs: docs,
       likely_entrypoints: detectEntrypoints(filePaths, packageJson),
+      language_stats: indexSummary.language_stats,
+      source_files_count: indexSummary.source_files_count,
+      test_files_count: indexSummary.test_files_count,
+      kernel_files_count: indexSummary.kernel_files_count,
+      largest_files: indexSummary.largest_files,
+      recently_modified_files: indexSummary.recently_modified_files,
+      cmake_targets: indexSummary.cmake_targets,
+      implementation_signals: implementationSignals(indexSummary),
       test_commands: detectTestCommands(scripts, filePaths),
       truncated: tree.truncated || allScripts.length > scripts.length,
       warnings
@@ -123,7 +135,15 @@ function normalizeScripts(scripts: Record<string, unknown>) {
     .map(([name, command]) => ({ name, command }));
 }
 
-function detectProjectType(packageJson: PackageJson | undefined, filePaths: string[]): string | undefined {
+type IndexSummary = Awaited<ReturnType<RepoIndexService["summary"]>>;
+
+function detectProjectType(packageJson: PackageJson | undefined, filePaths: string[], indexSummary?: IndexSummary): string | undefined {
+  if ((indexSummary?.kernel_files_count ?? 0) > 0 && filePaths.includes("CMakeLists.txt")) {
+    return "cpp-cuda-project";
+  }
+  if (filePaths.includes("CMakeLists.txt")) {
+    return "cmake-project";
+  }
   if (packageJson) {
     const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
     if ("@modelcontextprotocol/sdk" in deps) {
@@ -143,6 +163,9 @@ function detectProjectType(packageJson: PackageJson | undefined, filePaths: stri
   if (filePaths.some((path) => path.endsWith("Cargo.toml"))) {
     return "rust-project";
   }
+  if (filePaths.some((path) => /\.(cpp|cc|cxx|hpp|hh|hxx|cu|cuh)$/i.test(path))) {
+    return "cpp-project";
+  }
   return undefined;
 }
 
@@ -161,6 +184,17 @@ function languageByExtension(extension: string): string | undefined {
   return {
     ".cjs": "JavaScript",
     ".css": "CSS",
+    ".c": "C",
+    ".cc": "C++",
+    ".cpp": "C++",
+    ".cxx": "C++",
+    ".h": "C/C++ Header",
+    ".hh": "C++",
+    ".hpp": "C++",
+    ".hxx": "C++",
+    ".cu": "CUDA",
+    ".cuh": "CUDA",
+    ".cmake": "CMake",
     ".go": "Go",
     ".html": "HTML",
     ".java": "Java",
@@ -206,6 +240,10 @@ function detectEntrypoints(filePaths: string[], packageJson: PackageJson | undef
     "src/server.js",
     "src/main.ts",
     "src/main.js",
+    "src/main.c",
+    "src/main.cc",
+    "src/main.cpp",
+    "src/main.cu",
     "src/app.ts",
     "src/app.js",
     "index.ts",
@@ -214,10 +252,56 @@ function detectEntrypoints(filePaths: string[], packageJson: PackageJson | undef
     "server.js"
   ]);
   const entrypoints = filePaths.filter((path) => preferredNames.has(path));
+  if (filePaths.includes("CMakeLists.txt")) {
+    entrypoints.unshift("CMakeLists.txt");
+  }
   if (packageJson && filePaths.includes("package.json")) {
     entrypoints.unshift("package.json");
   }
   return [...new Set(entrypoints)].slice(0, MAX_ENTRYPOINTS);
+}
+
+function displayLanguages(languageStats: IndexSummary["language_stats"]): string[] {
+  const names = languageStats.map((stat) => ({
+    c: "C",
+    cpp: "C++",
+    cuda: "CUDA",
+    cmake: "CMake",
+    typescript: "TypeScript",
+    tsx: "TypeScript",
+    javascript: "JavaScript",
+    jsx: "JavaScript",
+    markdown: "Markdown",
+    python: "Python",
+    go: "Go",
+    rust: "Rust",
+    java: "Java",
+    css: "CSS",
+    html: "HTML",
+    json: "JSON",
+    yaml: "YAML"
+  }[stat.language] ?? stat.language));
+  return [...new Set(names)].sort();
+}
+
+function implementationSignals(indexSummary: IndexSummary): string[] {
+  const signals = [];
+  if (indexSummary.source_files_count > 0) {
+    signals.push(`SOURCE_FILES:${indexSummary.source_files_count}`);
+  }
+  if (indexSummary.test_files_count > 0) {
+    signals.push(`TEST_FILES:${indexSummary.test_files_count}`);
+  }
+  if (indexSummary.kernel_files_count > 0) {
+    signals.push(`CUDA_KERNELS:${indexSummary.kernel_files_count}`);
+  }
+  if (indexSummary.cmake_targets.length > 0) {
+    signals.push(`CMAKE_TARGETS:${indexSummary.cmake_targets.length}`);
+  }
+  if (indexSummary.language_stats.some((stat) => stat.language === "cuda")) {
+    signals.push("CUDA_IMPLEMENTATION_PRESENT");
+  }
+  return signals;
 }
 
 function detectTestCommands(scripts: Array<{ name: string; command: string }>, filePaths: string[]): string[] {

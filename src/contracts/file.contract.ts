@@ -14,8 +14,18 @@ export const FetchFileInputSchema = RepoInputSchema.extend({
   path: z.string().min(1),
   start_line: z.number().int().positive().optional(),
   end_line: z.number().int().positive().optional(),
+  max_lines: z.number().int().positive().optional(),
   max_bytes: z.number().int().positive().optional(),
   override_default_excludes: z.boolean().optional()
+});
+
+export const FetchRegionInputSchema = RepoInputSchema.extend({
+  path: z.string().min(1),
+  region: z.enum(["symbol", "function", "class", "around_line"]),
+  name: z.string().optional(),
+  line: z.number().int().positive().optional(),
+  context_lines: z.number().int().min(0).max(200).optional(),
+  max_lines: z.number().int().positive().optional()
 });
 
 export const ReadManyInputSchema = RepoInputSchema.extend({
@@ -45,6 +55,15 @@ export const FileSummarySchema = z.object({
   size_bytes: z.number().int().nonnegative().optional()
 });
 
+export const RedactionSchema = z.object({
+  line: z.number().int().positive(),
+  start_column: z.number().int().positive(),
+  end_column: z.number().int().positive(),
+  kind: z.string(),
+  confidence: z.enum(["high"]),
+  reason: z.string()
+});
+
 export const FileContentSchema = z.object({
   path: z.string(),
   language: z.string().optional(),
@@ -54,8 +73,21 @@ export const FileContentSchema = z.object({
   start_line: z.number().int().positive(),
   end_line: z.number().int().positive(),
   truncated: z.boolean(),
+  has_more: z.boolean(),
+  next_start_line: z.number().int().positive().optional(),
+  max_lines_applied: z.number().int().positive(),
   text: z.string(),
+  redactions: z.array(RedactionSchema).default([]),
   warnings: z.array(z.string()).default([])
+});
+
+export const FetchRegionResultSchema = FileContentSchema.extend({
+  region: z.object({
+    kind: z.string(),
+    name: z.string().optional(),
+    line: z.number().int().positive().optional(),
+    matched_symbol: z.string().optional()
+  })
 });
 
 export const ReadManyResultSchema = z.object({

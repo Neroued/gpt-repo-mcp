@@ -101,4 +101,31 @@ describe("ProjectBriefService", () => {
     expect(result.languages).not.toContain("Binary");
     expect(result.key_docs.map((doc) => doc.path)).not.toContain("secret.key");
   });
+
+  test("detects C++/CUDA implementation signals beyond README text", async () => {
+    const fixture = await createRepoFixture();
+    await writeFile(join(fixture.root, "README.md"), "# Design Notes\nStill drafting ideas.\n");
+    await writeFile(join(fixture.root, "CMakeLists.txt"), [
+      "cmake_minimum_required(VERSION 3.25)",
+      "add_executable(qwen src/main.cpp src/kernel.cu)",
+      ""
+    ].join("\n"));
+    await writeFile(join(fixture.root, "src", "main.cpp"), "int main() { return 0; }\n");
+    await writeFile(join(fixture.root, "src", "kernel.cu"), "__global__ void linear_q4_gemv_kernel(float* out) { out[0] = 1.0f; }\n");
+
+    const result = await new ProjectBriefService({
+      repo_id: "fixture",
+      display_name: "Fixture",
+      root: fixture.root
+    }, new PathSandbox(fixture.root)).brief();
+
+    expect(result.project_type).toBe("cpp-cuda-project");
+    expect(result.languages).toEqual(expect.arrayContaining(["C++", "CUDA", "CMake"]));
+    expect(result.source_files_count).toBeGreaterThanOrEqual(3);
+    expect(result.kernel_files_count).toBeGreaterThanOrEqual(1);
+    expect(result.cmake_targets).toEqual([
+      expect.objectContaining({ name: "qwen", kind: "add_executable" })
+    ]);
+    expect(result.implementation_signals).toEqual(expect.arrayContaining(["CUDA_IMPLEMENTATION_PRESENT"]));
+  });
 });

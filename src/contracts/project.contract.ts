@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CMakeTargetSchema, IndexedFileSchema, LanguageStatSchema } from "./index.contract.js";
 import { RepoInputSchema } from "./repo.contract.js";
 
 export const ProjectBriefIncludeSchema = z.enum(["package", "readme", "architecture", "scripts", "recent_git", "todos"]);
@@ -24,6 +25,14 @@ export const ProjectBriefResultSchema = z.object({
     summary: z.string()
   })),
   likely_entrypoints: z.array(z.string()),
+  language_stats: z.array(LanguageStatSchema).default([]),
+  source_files_count: z.number().int().nonnegative().optional(),
+  test_files_count: z.number().int().nonnegative().optional(),
+  kernel_files_count: z.number().int().nonnegative().optional(),
+  largest_files: z.array(IndexedFileSchema).default([]),
+  recently_modified_files: z.array(IndexedFileSchema).default([]),
+  cmake_targets: z.array(CMakeTargetSchema).default([]),
+  implementation_signals: z.array(z.string()).default([]),
   test_commands: z.array(z.string()),
   truncated: z.boolean(),
   warnings: z.array(z.string())

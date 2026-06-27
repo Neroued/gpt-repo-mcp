@@ -25,8 +25,14 @@ const DEFAULT_PROFILE_DIR = join(HOME, ".config", "tunnel-client");
 const DEFAULT_BIN = join(HOME, ".local", "bin", "tunnel-client");
 const DEFAULT_PORT = "8787";
 const DEFAULT_HEALTH_ADDR = "127.0.0.1:8080";
-const PID_FILE = "/tmp/gpt-repo-mcp-secure.pid";
-const LOG_FILE = "/tmp/gpt-repo-mcp-secure.log";
+const RUN_DIR = join(ROOT, "run");
+const LOG_DIR = join(ROOT, "logs");
+const PID_FILE = join(RUN_DIR, "gpt-repo-mcp-secure.pid");
+const LEGACY_PID_FILE = "/tmp/gpt-repo-mcp-secure.pid";
+const LOG_FILE = join(LOG_DIR, "gpt-repo-mcp-secure.log");
+const SERVICE_NAME = "gpt-repo-mcp-secure.service";
+const USER_SYSTEMD_DIR = join(HOME, ".config", "systemd", "user");
+const USER_SERVICE_FILE = join(USER_SYSTEMD_DIR, SERVICE_NAME);
 
 const TUNNEL_CLIENT_VERSION = "v0.0.9--context-conduit-topaz";
 const TUNNEL_CLIENT_URL =
@@ -87,6 +93,9 @@ async function main() {
     case "check":
       await check(options);
       return;
+    case "run":
+      await runForeground();
+      return;
     case "start":
       await start(options);
       return;
@@ -102,6 +111,15 @@ async function main() {
       return;
     case "logs":
       await logs(options);
+      return;
+    case "install-service":
+      await installService(options);
+      return;
+    case "uninstall-service":
+      await uninstallService();
+      return;
+    case "service-status":
+      await serviceStatus();
       return;
     case "chatgpt":
       printChatGptInstructions();
@@ -146,10 +164,14 @@ Usage:
   npm run secure:tunnel -- install-client [--bin <path>]
   npm run secure:tunnel -- setup --repo <path> --tunnel-id <tunnel_...> [--repo-id <id>] [--display-name <name>]
   npm run secure:tunnel -- check
+  npm run secure:tunnel -- run
   npm run secure:start
   npm run secure:status
   npm run secure:stop
   npm run secure:logs
+  npm run secure:tunnel -- install-service
+  npm run secure:tunnel -- uninstall-service
+  npm run secure:tunnel -- service-status
   npm run secure:tunnel -- chatgpt
 
 Defaults:
@@ -159,6 +181,8 @@ Defaults:
   tunnel-client: ${DEFAULT_BIN}
   MCP URL: http://127.0.0.1:${DEFAULT_PORT}/mcp
   admin UI: http://${DEFAULT_HEALTH_ADDR}/ui
+  pid: ${PID_FILE}
+  log: ${LOG_FILE}
 
 The runtime API key must be stored in .env as CONTROL_PLANE_API_KEY.
 This script never prints that key.`);
@@ -333,6 +357,7 @@ function isExpectedDoctorFailure(failedChecks, readyOk) {
 
 async function start() {
   const env = await readEnv();
+  await ensureRuntimeDirs();
   await ensureFile(resolve(ROOT, env.GPT_REPO_CONFIG ?? DEFAULT_CONFIG), "config");
   await ensureExecutable(resolvePath(env.TUNNEL_CLIENT_BIN ?? DEFAULT_BIN), "tunnel-client");
   if (!env.CONTROL_PLANE_API_KEY) {
@@ -367,6 +392,57 @@ async function start() {
   console.log(`Log: ${LOG_FILE}`);
 }
 
+async function runForeground() {
+  const env = await readEnv();
+  Object.assign(process.env, env);
+  await ensureRuntimeDirs();
+  await ensureFile(resolve(ROOT, env.GPT_REPO_CONFIG ?? DEFAULT_CONFIG), "config");
+  await ensureExecutable(resolvePath(env.TUNNEL_CLIENT_BIN ?? DEFAULT_BIN), "tunnel-client");
+  if (!env.CONTROL_PLANE_API_KEY) {
+    throw new Error("Missing CONTROL_PLANE_API_KEY in .env.");
+  }
+
+  const runningPid = await readRunningPid();
+  if (runningPid) {
+    throw new Error(`Refusing to start duplicate secure tunnel supervisor; PID ${runningPid} is already running.`);
+  }
+
+  const out = openSync(LOG_FILE, "a");
+  let child;
+  const stopChild = (signal = "SIGTERM") => {
+    if (child && !child.killed) {
+      child.kill(signal);
+    }
+  };
+
+  try {
+    child = spawn("node", ["scripts/connect-secure.mjs"], {
+      cwd: ROOT,
+      stdio: ["ignore", out, out],
+      env: process.env
+    });
+    await writeFile(PID_FILE, `${child.pid}\n`);
+
+    process.once("SIGTERM", () => stopChild("SIGTERM"));
+    process.once("SIGINT", () => stopChild("SIGINT"));
+
+    const exitCode = await new Promise((resolvePromise, reject) => {
+      child.once("error", reject);
+      child.once("exit", (code, signal) => {
+        if (signal) {
+          resolvePromise(0);
+          return;
+        }
+        resolvePromise(code ?? 1);
+      });
+    });
+    await rm(PID_FILE, { force: true });
+    process.exitCode = exitCode;
+  } finally {
+    closeSync(out);
+  }
+}
+
 async function stop(options = {}) {
   const pid = await readRunningPid();
   if (!pid) {
@@ -380,7 +456,7 @@ async function stop(options = {}) {
       }
     }
     if (!options.quiet) console.log("Not running.");
-    await rm(PID_FILE, { force: true });
+    await removePidFiles();
     return;
   }
 
@@ -393,7 +469,7 @@ async function stop(options = {}) {
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
     if (!(await isPidRunning(pid))) {
-      await rm(PID_FILE, { force: true });
+      await removePidFiles();
       if (!options.quiet) console.log("Stopped.");
       return;
     }
@@ -405,7 +481,7 @@ async function stop(options = {}) {
   } catch {
     process.kill(pid, "SIGKILL");
   }
-  await rm(PID_FILE, { force: true });
+  await removePidFiles();
   if (!options.quiet) console.log("Stopped with SIGKILL.");
 }
 
@@ -429,6 +505,7 @@ async function status() {
   console.log(`MCP URL: http://127.0.0.1:${port}/mcp`);
   console.log(`admin UI: http://127.0.0.1:8080/ui`);
   console.log(`log: ${LOG_FILE}`);
+  console.log(`pid file: ${PID_FILE}`);
 
   const mcpHealth = await fetchText(`http://127.0.0.1:${port}/health`);
   console.log(`MCP health: ${mcpHealth.ok ? mcpHealth.text : "not reachable"}`);
@@ -444,11 +521,91 @@ async function status() {
 
 async function logs(options) {
   const lines = String(options.lines ?? "120");
+  await ensureRuntimeDirs();
   if (options.follow) {
     await spawnInteractive("tail", ["-f", LOG_FILE]);
     return;
   }
   await run("tail", ["-n", lines, LOG_FILE], { inherit: true });
+}
+
+async function installService(options) {
+  await ensureSystemdAvailable();
+  await ensureRuntimeDirs();
+  const env = await readEnv();
+  await ensureFile(resolve(ROOT, env.GPT_REPO_CONFIG ?? DEFAULT_CONFIG), "config");
+  await ensureExecutable(resolvePath(env.TUNNEL_CLIENT_BIN ?? DEFAULT_BIN), "tunnel-client");
+  if (!env.CONTROL_PLANE_API_KEY) {
+    throw new Error("Missing CONTROL_PLANE_API_KEY in .env.");
+  }
+
+  await mkdir(USER_SYSTEMD_DIR, { recursive: true });
+  await writeFile(USER_SERVICE_FILE, serviceUnitText());
+  await run("systemctl", ["--user", "daemon-reload"], { inherit: true });
+  await runAllowFailure("systemctl", ["--user", "stop", SERVICE_NAME]);
+  await stop({ quiet: true });
+  if (!options.skipLinger) {
+    await enableLinger();
+  }
+  await run("systemctl", ["--user", "enable", "--now", SERVICE_NAME], { inherit: true });
+  await waitForUrl(`http://127.0.0.1:${env.PORT ?? DEFAULT_PORT}/health`, 30000, "MCP health");
+  await waitForUrl("http://127.0.0.1:8080/readyz", 45000, "tunnel readyz");
+  console.log(`Installed and started ${SERVICE_NAME}`);
+  console.log(`Unit: ${USER_SERVICE_FILE}`);
+  console.log(`Log: ${LOG_FILE}`);
+}
+
+async function uninstallService() {
+  await ensureSystemdAvailable();
+  await runAllowFailure("systemctl", ["--user", "disable", "--now", SERVICE_NAME]);
+  await rm(USER_SERVICE_FILE, { force: true });
+  await run("systemctl", ["--user", "daemon-reload"], { inherit: true });
+  await removePidFiles();
+  console.log(`Removed ${SERVICE_NAME}`);
+}
+
+async function serviceStatus() {
+  await ensureSystemdAvailable();
+  await run("systemctl", ["--user", "status", SERVICE_NAME, "--no-pager"], { inherit: true });
+}
+
+function serviceUnitText() {
+  return `[Unit]
+Description=GPT Repo MCP Secure Tunnel
+Documentation=https://github.com/CAHN91/gpt-repo-mcp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=${ROOT}
+ExecStart=${process.execPath} ${join(ROOT, "scripts", "secure-tunnel-ops.mjs")} run
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target
+`;
+}
+
+async function ensureSystemdAvailable() {
+  if (!await pathExists("/run/systemd/system")) {
+    throw new Error("systemd is not running. Enable systemd in WSL before installing the service.");
+  }
+  await run("systemctl", ["--user", "show-environment"], { inherit: true });
+}
+
+async function enableLinger() {
+  const user = process.env.USER;
+  if (!user) {
+    throw new Error("USER is not set; cannot enable systemd linger for boot autostart.");
+  }
+  const result = await runAllowFailure("loginctl", ["enable-linger", user]);
+  if (result.code !== 0) {
+    throw new Error(`loginctl enable-linger ${user} failed\n${result.stderr || result.stdout}`);
+  }
 }
 
 function printChatGptInstructions() {
@@ -568,6 +725,11 @@ async function ensureDirectory(path, label) {
   if (!info?.isDirectory()) throw new Error(`${label} directory not found: ${path}`);
 }
 
+async function ensureRuntimeDirs() {
+  await mkdir(LOG_DIR, { recursive: true });
+  await mkdir(RUN_DIR, { recursive: true });
+}
+
 async function ensureFile(path, label) {
   await access(path, constants.R_OK).catch(() => {
     throw new Error(`${label} file not found or unreadable: ${path}`);
@@ -646,17 +808,31 @@ function delay(ms) {
 }
 
 async function readRunningPid() {
-  const raw = await readFile(PID_FILE, "utf8").catch(() => "");
-  const pid = Number(raw.trim());
-  if (pid && await isPidRunning(pid)) return pid;
-  await rm(PID_FILE, { force: true });
+  for (const path of [PID_FILE, LEGACY_PID_FILE]) {
+    const raw = await readFile(path, "utf8").catch(() => "");
+    const pid = Number(raw.trim());
+    if (pid && await isPidRunning(pid)) {
+      if (path !== PID_FILE) {
+        await ensureRuntimeDirs();
+        await writeFile(PID_FILE, `${pid}\n`);
+      }
+      return pid;
+    }
+    await rm(path, { force: true });
+  }
   const runtime = await detectRuntimeProcesses();
   if (runtime.supervisorPids.length > 0) {
     const detectedPid = runtime.supervisorPids[0];
+    await ensureRuntimeDirs();
     await writeFile(PID_FILE, `${detectedPid}\n`);
     return detectedPid;
   }
   return undefined;
+}
+
+async function removePidFiles() {
+  await rm(PID_FILE, { force: true });
+  await rm(LEGACY_PID_FILE, { force: true });
 }
 
 async function isPidRunning(pid) {
@@ -686,4 +862,13 @@ async function detectRuntimeProcesses() {
   }
 
   return { supervisorPids, tunnelPids, mcpPids };
+}
+
+async function pathExists(path) {
+  try {
+    await access(path, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }

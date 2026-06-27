@@ -1,6 +1,6 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { SECRET_VALUE_PATTERN } from "../policies/secret-patterns.js";
 import { RepoReaderError, toRepoReaderError } from "./errors.js";
+import { SecretScanner } from "../services/secret-scanner.js";
 
 export type ToolContent = { type: "text"; text: string };
 
@@ -26,8 +26,8 @@ export type ErrorEnvelope = {
 };
 
 export function redactSensitiveText(value: string): string {
-  return value
-    .replace(SECRET_VALUE_PATTERN, "[REDACTED_SECRET]")
+  const scanner = new SecretScanner();
+  return scanner.redactText(value)
     .replace(/(?:\/Users|\/home|\/private|\/var|\/tmp)\/[^\s"'`]+/g, "[REDACTED_PATH]")
     .replace(/[A-Za-z]:\\[^\s"'`]+/g, "[REDACTED_PATH]");
 }

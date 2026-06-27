@@ -11,6 +11,7 @@ export type FetchFileOptions = {
   path: string;
   start_line?: number;
   end_line?: number;
+  max_lines?: number;
   max_bytes?: number;
   override_default_excludes?: boolean;
 };
@@ -53,11 +54,23 @@ export class FileReader {
     if (isPublicEnvTemplatePath(resolved.repoPath) && this.secretScanner.hasSecretValue(rawText)) {
       throw new RepoReaderError("SECRET_CANDIDATE_BLOCKED", `Secret candidate blocked: ${resolved.repoPath}`);
     }
-    const text = this.secretScanner.redact(rawText);
-    const lines = text.split(/\r?\n/);
+    const redacted = this.secretScanner.redact(rawText);
+    const lines = redacted.text.split(/\r?\n/);
     const startLine = options.start_line ?? 1;
-    const endLine = options.end_line ?? lines.length;
+    if (options.end_line !== undefined && options.end_line < startLine) {
+      throw new RepoReaderError("VALIDATION_ERROR", "end_line must be greater than or equal to start_line.");
+    }
+    const requestedMaxLines = options.max_lines ?? DEFAULT_LIMITS.default_fetch_lines;
+    const maxLinesApplied = Math.min(requestedMaxLines, DEFAULT_LIMITS.max_fetch_lines);
+    if (requestedMaxLines > DEFAULT_LIMITS.max_fetch_lines) {
+      warnings.push(`MAX_LINES_CAPPED:${DEFAULT_LIMITS.max_fetch_lines}`);
+    }
+    const maxEndLine = startLine + maxLinesApplied - 1;
+    const requestedEndLine = options.end_line ?? maxEndLine;
+    const endLine = Math.min(requestedEndLine, maxEndLine);
     const selected = lines.slice(startLine - 1, endLine).join("\n");
+    const boundedEndLine = Math.min(endLine, lines.length);
+    const hasMore = boundedEndLine < lines.length;
 
     return {
       path: resolved.repoPath,
@@ -66,9 +79,13 @@ export class FileReader {
       sha256: createHash("sha256").update(content).digest("hex"),
       total_lines: lines.length,
       start_line: startLine,
-      end_line: Math.min(endLine, lines.length),
-      truncated: false,
+      end_line: boundedEndLine,
+      truncated: hasMore,
+      has_more: hasMore,
+      next_start_line: hasMore ? boundedEndLine + 1 : undefined,
+      max_lines_applied: maxLinesApplied,
       text: selected,
+      redactions: redacted.redactions,
       warnings
     };
   }

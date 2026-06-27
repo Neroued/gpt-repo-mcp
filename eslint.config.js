@@ -8,6 +8,18 @@ export default tseslint.config(
     ignores: ["dist/**", "coverage/**", "node_modules/**"]
   },
   {
+    files: ["**/*.js", "**/*.mjs"],
+    languageOptions: {
+      globals: {
+        Buffer: "readonly",
+        console: "readonly",
+        fetch: "readonly",
+        process: "readonly",
+        setTimeout: "readonly"
+      }
+    }
+  },
+  {
     files: ["**/*.ts"],
     languageOptions: {
       parserOptions: {

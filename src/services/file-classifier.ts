@@ -9,6 +9,17 @@ const LANGUAGE_BY_EXT: Record<string, string> = {
   ".jsx": "jsx",
   ".json": "json",
   ".md": "markdown",
+  ".c": "c",
+  ".cc": "cpp",
+  ".cpp": "cpp",
+  ".cxx": "cpp",
+  ".h": "c",
+  ".hh": "cpp",
+  ".hpp": "cpp",
+  ".hxx": "cpp",
+  ".cu": "cuda",
+  ".cuh": "cuda",
+  ".cmake": "cmake",
   ".py": "python",
   ".go": "go",
   ".rs": "rust",
@@ -33,12 +44,20 @@ export class FileClassifier {
   async classify(repoPath: string, absolutePath: string): Promise<FileClassification> {
     return {
       path: repoPath,
-      language: LANGUAGE_BY_EXT[extname(repoPath).toLowerCase()],
+      language: languageForPath(repoPath),
       is_binary: await isBinaryFile(absolutePath),
       is_secret_candidate: this.ignoreEngine.isSensitiveCandidate(repoPath),
       is_generated: this.ignoreEngine.isIgnored(repoPath)
     };
   }
+}
+
+function languageForPath(repoPath: string): string | undefined {
+  const basename = repoPath.split("/").pop();
+  if (basename === "CMakeLists.txt") {
+    return "cmake";
+  }
+  return LANGUAGE_BY_EXT[extname(repoPath).toLowerCase()];
 }
 
 async function isBinaryFile(absolutePath: string): Promise<boolean> {

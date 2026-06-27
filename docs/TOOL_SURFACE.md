@@ -97,36 +97,98 @@ Example:
 
 Returns repository structure. It reports nested repos and submodules as metadata entries and does not recurse into them by default.
 
-Input: `repo_id`, optional `path`, `max_depth`, `page_size`, `include_files`, `respect_default_excludes`, `include_generated`, `include_dependencies`, `cursor`.
+Input: `repo_id`, optional `path`, `max_depth`, `page_size`, `include_files`, `include_globs`, `exclude_globs`, `tree_mode`, `respect_default_excludes`, `include_generated`, `include_dependencies`, `cursor`.
 Output: `entries[]` with `path`, `type`, optional `size_bytes`, plus `excluded_summary`, `truncated`, and optional `next_cursor`.
 Example:
 
 ```json
-{ "repo_id": "example-repo", "path": "src", "include_files": true, "max_depth": 2 }
+{ "repo_id": "example-repo", "tree_mode": "source_only", "include_files": true, "max_depth": 3 }
+```
+
+`tree_mode` can be `source_only`, `docs_only`, `tests_only`, or `all`.
+
+### `repo_index_summary`
+
+Builds or reuses a process-local repository index without writing cache files into the target repo.
+
+Input: `repo_id`, optional `force_refresh`.
+Output: `index_id`, cache metadata, language stats, source/test/doc counts, CUDA kernel count, largest files, recently modified files, CMake targets, and warnings.
+Example:
+
+```json
+{ "repo_id": "example-repo" }
+```
+
+### `repo_symbols`
+
+Lists indexed symbols, optionally filtered by name, kind, include globs, or exclude globs.
+
+Input: `repo_id`, optional `name`, `kind`, `include_globs`, `exclude_globs`, `max_results`, `cursor`, `force_refresh`.
+Output: `symbols[]` with `path`, `name`, `kind`, `start_line`, `end_line`, optional signature/container, plus counts and cursor.
+Example:
+
+```json
+{ "repo_id": "example-repo", "kind": "kernel", "include_globs": ["src/**"] }
 ```
 
 ### `repo_search`
 
-Searches text files with literal or regex matching. It respects default excludes and skips secret candidates.
+Searches text files with literal or regex matching. It scans all tree pages, respects default excludes, skips secret candidates, and redacts high-confidence secrets in snippets.
 
-Input: `repo_id`, `query`, optional `mode`, `include_globs`, `exclude_globs`, `context_lines`, `max_results`, `cursor`.
-Output: `results[]` with `path`, `line`, `column`, `text`, `before`, `after`, plus counts, truncation, cursor, and warnings.
+Input: `repo_id`, `query` or `queries`, optional `combine`, `mode`, `include_globs`, `exclude_globs`, `context_lines`, `max_results`, `cursor`.
+Output: `results[]` with `path`, `line`, `column`, optional `matched_query`, `text`, `before`, `after`, plus counts, truncation, cursor, and warnings.
 Example:
 
 ```json
-{ "repo_id": "example-repo", "query": "repo_next_action", "mode": "literal", "max_results": 20 }
+{ "repo_id": "example-repo", "queries": ["TODO", "FIXME"], "combine": "OR", "mode": "literal", "max_results": 20 }
+```
+
+### `repo_search_symbol`
+
+Finds a function, class, method, CUDA kernel, or other indexed symbol before reading its containing region.
+
+Input: `repo_id`, `name`, optional `kind`, `include_globs`, `exclude_globs`, `max_results`, `cursor`, `force_refresh`.
+Output: `results[]` using the symbol location shape, plus counts and cursor.
+Example:
+
+```json
+{ "repo_id": "example-repo", "name": "linear_q4_gemv_kernel", "kind": "kernel" }
+```
+
+### `repo_outline_file`
+
+Returns a structural outline for one source file without reading the whole file body into the chat.
+
+Input: `repo_id`, `path`, optional `max_symbols`.
+Output: includes, namespaces, classes, functions, methods, CUDA kernels, templates, TODO/FIXME items, all symbols, truncation flag, and warnings.
+Example:
+
+```json
+{ "repo_id": "example-repo", "path": "src/model/qwen3_6_27b.cpp" }
 ```
 
 ### `repo_fetch_file`
 
-Reads one repo-relative file, optionally with line bounds.
+Reads one repo-relative file with line pagination. Default reads are capped; use `has_more` and `next_start_line` to continue.
 
-Input: `repo_id`, `path`, optional `start_line`, `end_line`, `max_bytes`, `override_default_excludes`.
-Output: `path`, optional `language`, `size_bytes`, `sha256`, line metadata, `truncated`, `text`, and warnings.
+Input: `repo_id`, `path`, optional `start_line`, `end_line`, `max_lines`, `max_bytes`, `override_default_excludes`.
+Output: `path`, optional `language`, `size_bytes`, `sha256`, line metadata, `has_more`, `next_start_line`, `max_lines_applied`, `truncated`, `text`, `redactions`, and warnings.
 Example:
 
 ```json
-{ "repo_id": "example-repo", "path": "src/instructions.ts", "start_line": 1, "end_line": 80 }
+{ "repo_id": "example-repo", "path": "src/instructions.ts", "start_line": 1, "max_lines": 120 }
+```
+
+### `repo_fetch_region`
+
+Reads one function, class, symbol, or around-line slice from a source file.
+
+Input: `repo_id`, `path`, `region`, optional `name`, `line`, `context_lines`, `max_lines`.
+Output: the file-content shape plus `region` metadata.
+Example:
+
+```json
+{ "repo_id": "example-repo", "path": "src/kernel.cu", "region": "function", "name": "launch_state_passing" }
 ```
 
 ### `repo_read_many`
@@ -151,6 +213,18 @@ Example:
 
 ```json
 { "repo_id": "example-repo" }
+```
+
+### `repo_changed_since`
+
+Compares the current process-local repository index with a previous `index_id` returned by `repo_index_summary`.
+
+Input: `repo_id`, `index_id`, optional `force_refresh`.
+Output: previous/current index ids, `changed`, added/modified/removed path lists, and warnings.
+Example:
+
+```json
+{ "repo_id": "example-repo", "index_id": "abc123" }
 ```
 
 ### `repo_git_diff`
@@ -625,8 +699,10 @@ Project onboarding:
 
 1. `repo_list_roots` if the target repo is unknown.
 2. `repo_project_brief` for project type, scripts, docs, entrypoints, and test commands.
-3. `repo_tree` or `repo_search` for focused drilldown.
-4. `repo_fetch_file` or bounded `repo_read_many` for selected files only.
+3. `repo_tree` with `tree_mode: "source_only"` and `max_depth: 3` for bounded structure.
+4. `repo_index_summary` or `repo_symbols` when repository-scale code structure matters.
+5. `repo_search`, `repo_search_symbol`, or `repo_outline_file` for focused drilldown.
+6. `repo_fetch_region` or paginated `repo_fetch_file` for selected code only.
 
 Choose next work:
 
@@ -643,7 +719,9 @@ Plan a change:
 
 1. `repo_decision_memory` when conventions or architecture decisions may constrain the change.
 2. `repo_change_plan` for an implementation, refactor, debug, or feature plan.
-3. `repo_search`, `repo_fetch_file`, or bounded `repo_read_many` for focused drilldown.
+3. `repo_search` or `repo_search_symbol` to locate relevant code.
+4. `repo_outline_file` for large source files.
+5. `repo_fetch_region`, paginated `repo_fetch_file`, or bounded `repo_read_many` for focused evidence.
 
 Ship/current changes:
 

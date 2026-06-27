@@ -3,18 +3,21 @@ import { ChangePlanInputSchema, ChangePlanResultSchema } from "../contracts/chan
 import { CleanupPathsInputSchema, CleanupPathsResultSchema } from "../contracts/cleanup.contract.js";
 import { CodexReviewInputSchema, CodexReviewResultSchema, CodexTaskInputSchema, CodexTaskResultSchema, CodexTaskWriteInputSchema, CodexTaskWriteResultSchema } from "../contracts/codex-task.contract.js";
 import { DecisionLogInputSchema, DecisionLogResultSchema } from "../contracts/decision.contract.js";
-import { FetchFileInputSchema, FileContentSchema, ReadManyInputSchema, ReadManyResultSchema } from "../contracts/file.contract.js";
+import { FetchFileInputSchema, FetchRegionInputSchema, FetchRegionResultSchema, FileContentSchema, ReadManyInputSchema, ReadManyResultSchema } from "../contracts/file.contract.js";
 import { GitCommitInputSchema, GitCommitResultSchema, GitRecoverInputSchema, GitRecoverResultSchema, GitRestorePathsInputSchema, GitRestorePathsResultSchema, GitStageCommitInputSchema, GitStageCommitResultSchema, GitStageInputSchema, GitStageResultSchema, GitUnstageInputSchema, GitUnstageResultSchema } from "../contracts/git-operations.contract.js";
-import { GitDiffInputSchema, GitDiffResultSchema, GitStatusInputSchema, GitStatusResultSchema } from "../contracts/git.contract.js";
+import { ChangedSinceInputSchema, ChangedSinceResultSchema, GitDiffInputSchema, GitDiffResultSchema, GitStatusInputSchema, GitStatusResultSchema } from "../contracts/git.contract.js";
 import { GitReviewInputSchema, GitReviewResultSchema } from "../contracts/git-review.contract.js";
 import { HandoffInputSchema, HandoffResultSchema } from "../contracts/handoff.contract.js";
+import { IndexSummaryInputSchema, IndexSummaryResultSchema } from "../contracts/index.contract.js";
 import { NextActionInputSchema, NextActionResultSchema } from "../contracts/next-action.contract.js";
 import { LastWriteInputSchema, LastWriteResultSchema } from "../contracts/operation-receipt.contract.js";
+import { OutlineFileInputSchema, OutlineFileResultSchema } from "../contracts/outline.contract.js";
 import { PolicyExplainInputSchema, PolicyExplainResultSchema } from "../contracts/policy.contract.js";
 import { ProjectBriefInputSchema, ProjectBriefResultSchema } from "../contracts/project.contract.js";
 import { RepoInputSchema, RepoListResultSchema, RepoTreeInputSchema } from "../contracts/repo.contract.js";
 import { PlanReviewInputSchema, PlanReviewResultSchema } from "../contracts/review.contract.js";
-import { SearchInputSchema, SearchResponseSchema } from "../contracts/search.contract.js";
+import { SearchInputSchema, SearchResponseSchema, SearchSymbolInputSchema, SearchSymbolResponseSchema } from "../contracts/search.contract.js";
+import { RepoSymbolsInputSchema, RepoSymbolsResultSchema } from "../contracts/symbol.contract.js";
 import { TaskInventoryInputSchema, TaskInventoryResultSchema } from "../contracts/task.contract.js";
 import { RepoTreeResultSchema } from "../contracts/tree.contract.js";
 import { WriteChangesInputSchema, WriteChangesResultSchema, WriteFileInputSchema, WriteFileResultSchema } from "../contracts/write.contract.js";
@@ -24,10 +27,16 @@ export type ToolName =
   | "repo_policy_explain"
   | "repo_last_write"
   | "repo_tree"
+  | "repo_index_summary"
+  | "repo_symbols"
   | "repo_search"
+  | "repo_search_symbol"
+  | "repo_outline_file"
   | "repo_fetch_file"
+  | "repo_fetch_region"
   | "repo_read_many"
   | "repo_git_status"
+  | "repo_changed_since"
   | "repo_git_diff"
   | "repo_git_review"
   | "repo_git_stage"
@@ -75,13 +84,33 @@ export const toolContracts = {
     input: RepoTreeInputSchema,
     output: RepoTreeResultSchema
   },
+  repo_index_summary: {
+    input: IndexSummaryInputSchema,
+    output: IndexSummaryResultSchema
+  },
+  repo_symbols: {
+    input: RepoSymbolsInputSchema,
+    output: RepoSymbolsResultSchema
+  },
   repo_search: {
     input: SearchInputSchema,
     output: SearchResponseSchema
   },
+  repo_search_symbol: {
+    input: SearchSymbolInputSchema,
+    output: SearchSymbolResponseSchema
+  },
+  repo_outline_file: {
+    input: OutlineFileInputSchema,
+    output: OutlineFileResultSchema
+  },
   repo_fetch_file: {
     input: FetchFileInputSchema,
     output: FileContentSchema
+  },
+  repo_fetch_region: {
+    input: FetchRegionInputSchema,
+    output: FetchRegionResultSchema
   },
   repo_read_many: {
     input: ReadManyInputSchema,
@@ -90,6 +119,10 @@ export const toolContracts = {
   repo_git_status: {
     input: GitStatusInputSchema,
     output: GitStatusResultSchema
+  },
+  repo_changed_since: {
+    input: ChangedSinceInputSchema,
+    output: ChangedSinceResultSchema
   },
   repo_git_diff: {
     input: GitDiffInputSchema,

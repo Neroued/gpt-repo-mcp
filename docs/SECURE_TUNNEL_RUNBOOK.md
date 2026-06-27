@@ -17,8 +17,9 @@ This runbook is for the local WSL deployment where ChatGPT Developer Mode reache
 - MCP config: `config.local.json`
 - Tunnel profile: `~/.config/tunnel-client/gpt-repo-local.yaml`
 - Tunnel client binary: `~/.local/bin/tunnel-client`
-- Runtime log: `/tmp/gpt-repo-mcp-secure.log`
-- Runtime PID file: `/tmp/gpt-repo-mcp-secure.pid`
+- Runtime log: `logs/gpt-repo-mcp-secure.log`
+- Runtime PID file: `run/gpt-repo-mcp-secure.pid`
+- User systemd unit: `~/.config/systemd/user/gpt-repo-mcp-secure.service`
 
 ## One-Time Setup
 
@@ -98,6 +99,40 @@ Stop:
 npm run secure:stop
 ```
 
+## Boot Autostart
+
+Install and start the user-level systemd service:
+
+```bash
+npm run secure:install-service
+```
+
+This writes `~/.config/systemd/user/gpt-repo-mcp-secure.service`, enables linger for the current Linux user, enables the service, and starts it immediately. The service runs:
+
+```bash
+node scripts/secure-tunnel-ops.mjs run
+```
+
+Service status:
+
+```bash
+npm run secure:service-status
+```
+
+Disable and remove the service:
+
+```bash
+npm run secure:uninstall-service
+```
+
+If `loginctl enable-linger` is blocked by the host policy, rerun with:
+
+```bash
+npm run secure:tunnel -- install-service --skip-linger
+```
+
+Without linger, the service starts when the user systemd manager starts; with linger, it starts at WSL/system boot without an interactive login.
+
 ## Expected Healthy State
 
 `npm run secure:status` should show:
@@ -132,8 +167,15 @@ Start with only these tools enabled:
 repo_list_roots
 repo_policy_explain
 repo_tree
+repo_index_summary
+repo_symbols
+repo_search
+repo_search_symbol
+repo_outline_file
 repo_fetch_file
+repo_fetch_region
 repo_read_many
+repo_project_brief
 repo_change_plan
 repo_plan_review
 repo_prepare_codex_task
@@ -144,7 +186,6 @@ repo_next_action
 Disable these first:
 
 ```text
-repo_search
 repo_git_diff
 repo_git_review
 repo_git_stage
@@ -166,7 +207,7 @@ repo_write_handoff
 Starter prompt:
 
 ```text
-Use GPT Repo MCP only. You are my planner. Do not write files. Do not use repo_search or repo_git_diff. First call repo_list_roots, then use repo_tree and repo_fetch_file only for files I ask you to inspect. Produce an implementation plan for Codex.
+Use GPT Repo MCP only. You are my planner. Do not write files. First call repo_list_roots, then repo_project_brief, then repo_tree with tree_mode source_only and max_depth 3. Use repo_outline_file, repo_search_symbol, and repo_fetch_region before fetching large files. Produce an implementation plan for Codex.
 ```
 
 ## Notes

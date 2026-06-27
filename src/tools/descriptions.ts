@@ -6,15 +6,27 @@ export const descriptions = {
   repo_last_write:
     "Use this when the user asks what the last write operation changed or how to continue review/recovery after a previous write. Reads safe local receipt metadata only and never mutates files or git.",
   repo_tree:
-    "Use this when the user asks to inspect repository structure or locate likely files by directory. Do not use this when the user asks to read file contents.",
+    "Use this when the user asks to inspect repository structure or locate likely files by directory. Supports tree_mode source_only/docs_only/tests_only/all plus include_globs and exclude_globs. Do not use this when the user asks to read file contents.",
+  repo_index_summary:
+    "Use this when the user needs a compact repository index with language stats, source/test/doc counts, largest files, CMake targets, and cache/index metadata before drilling into code.",
+  repo_symbols:
+    "Use this when the user asks to list known repository symbols from the process-local index, optionally filtered by name, kind, include_globs, or exclude_globs.",
   repo_search:
-    "Use this when the user asks to find code, inspect usages, perform a bughunt, or locate relevant files before reading them. Prefer this before repo_read_many.",
+    "Use this when the user asks to find code, inspect usages, perform a bughunt, or locate relevant files before reading them. Supports literal or regex query, multi-query OR/AND, include_globs, and exclude_globs. Prefer this before repo_read_many.",
+  repo_search_symbol:
+    "Use this when the user asks to find a function, class, method, CUDA kernel, or other code symbol before reading the containing region.",
+  repo_outline_file:
+    "Use this when the user needs a structural outline of one source file before reading it. Returns includes, classes, functions, methods, CUDA kernels, templates, TODO/FIXME items, and line ranges.",
   repo_fetch_file:
-    "Use this when the user names a specific file or after repo_tree/repo_search identifies a relevant file. Supports line ranges. Do not use for broad repository review.",
+    "Use this when the user names a specific file or after repo_tree/repo_search identifies a relevant file. Supports start_line, end_line, max_lines pagination, has_more, and next_start_line. Do not use for broad repository review or large files when repo_outline_file/repo_fetch_region can be used.",
+  repo_fetch_region:
+    "Use this when the user needs one function, class, symbol, or around-line slice from a source file instead of fetching the whole file.",
   repo_read_many:
     "Use this when the user asks to read a bounded set of explicit files or glob-matched files. Do not use this to read an entire repository.",
   repo_git_status:
     "Use this when the user asks for git status, branch, dirty files, or changed file counts. Do not use this to inspect file contents.",
+  repo_changed_since:
+    "Use this when the user has a previous repo_index_summary index_id and asks what changed since that repository index snapshot.",
   repo_git_diff:
     "Use this when the user asks to review changes or inspect a git diff. Default first call should pass only repo_id. Do not include staged, unstaged, paths, max_bytes, or context_lines on the first pass. Use optional filters only after the default diff is truncated, too broad, or the user asks for a specific comparison.",
   repo_git_review:

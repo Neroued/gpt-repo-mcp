@@ -139,10 +139,10 @@ Codex is done. Review the Codex result and the git diff for <repo_id>.
 
 | Category | Tools |
 | --- | --- |
-| Repo discovery | `repo_list_roots`, `repo_tree`, `repo_search`, `repo_fetch_file`, `repo_read_many` |
+| Repo discovery | `repo_list_roots`, `repo_tree`, `repo_index_summary`, `repo_symbols`, `repo_search`, `repo_search_symbol`, `repo_outline_file`, `repo_fetch_file`, `repo_fetch_region`, `repo_read_many` |
 | Policy help | `repo_policy_explain` |
 | Planning | `repo_project_brief`, `repo_task_inventory`, `repo_decision_memory`, `repo_change_plan`, `repo_next_action`, `repo_plan_review` |
-| Git review | `repo_git_status`, `repo_git_diff`, `repo_git_review` |
+| Git review | `repo_git_status`, `repo_changed_since`, `repo_git_diff`, `repo_git_review` |
 | File writes | `repo_write_file`, `repo_write_changes` |
 | ChatGPT session continuity | `repo_write_handoff`, `repo_last_write` |
 | Local ship flow | `repo_write_stage`, `repo_write_unstage`, `repo_write_commit`, `repo_write_stage_commit`, `repo_write_recover`, `repo_cleanup_paths` |

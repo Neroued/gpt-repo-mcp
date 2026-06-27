@@ -12,6 +12,8 @@ import { HandoffService } from "../services/handoff-service.js";
 import { OperationsPolicy } from "../services/operations-policy.js";
 import { ReviewPlanner } from "../services/review-planner.js";
 import { ReadManyService } from "../services/read-many-service.js";
+import { OutlineService } from "../services/outline-service.js";
+import { RepoIndexService } from "../services/repo-index-service.js";
 import { ProjectBriefService } from "../services/project-brief-service.js";
 import { TaskInventoryService } from "../services/task-inventory-service.js";
 import { DecisionLogService } from "../services/decision-log-service.js";
@@ -30,6 +32,8 @@ import { audit } from "../runtime/telemetry.js";
 import type { RuntimeContext } from "../runtime/context.js";
 import type { SearchOptions } from "../services/search-service.js";
 import type { FetchFileOptions } from "../services/file-reader.js";
+import type { FetchRegionOptions } from "../services/outline-service.js";
+import type { IndexOptions, SymbolQueryOptions } from "../services/repo-index-service.js";
 import type { TreeOptions } from "../services/repo-tree-service.js";
 import type { ProjectBriefInput } from "../contracts/project.contract.js";
 import type { TaskInventoryInput } from "../contracts/task.contract.js";
@@ -63,6 +67,10 @@ type GitDiffInput = RepoInput & {
   paths?: string[];
   max_bytes?: number;
   context_lines?: number;
+};
+type ChangedSinceInput = RepoInput & {
+  index_id: string;
+  force_refresh?: boolean;
 };
 
 export type ToolHandler = (input: unknown, context: RuntimeContext) => Promise<CallToolResult>;
@@ -99,6 +107,22 @@ export const treeHandler: ToolHandler = async (input, context) => safeTool<TreeO
   return createSuccessEnvelope(result, `Returned ${result.entries.length} tree entries.`);
 });
 
+export const indexSummaryHandler: ToolHandler = async (input, context) => safeTool<IndexOptions & RepoInput>("repo_index_summary", input, context, async (args) => {
+  const repo = context.registry.get(args.repo_id);
+  const sandbox = new PathSandbox(repo.root);
+  const result = await new RepoIndexService(repo.root, sandbox).summary({ force_refresh: args.force_refresh });
+  audit({ tool: "repo_index_summary", repo_id: args.repo_id, counts: { files: result.file_count, symbols: result.kernel_files_count }, warnings: result.warnings });
+  return createSuccessEnvelope(result, `Indexed ${result.file_count} files.`);
+});
+
+export const symbolsHandler: ToolHandler = async (input, context) => safeTool<SymbolQueryOptions & RepoInput>("repo_symbols", input, context, async (args) => {
+  const repo = context.registry.get(args.repo_id);
+  const sandbox = new PathSandbox(repo.root);
+  const result = await new RepoIndexService(repo.root, sandbox).symbols(args);
+  audit({ tool: "repo_symbols", repo_id: args.repo_id, counts: { symbols: result.returned_count }, truncated: result.truncated, warnings: result.warnings });
+  return createSuccessEnvelope(result, `Returned ${result.returned_count} symbols.`);
+});
+
 export const searchHandler: ToolHandler = async (input, context) => safeTool<SearchOptions & RepoInput>("repo_search", input, context, async (args) => {
   const repo = context.registry.get(args.repo_id);
   const sandbox = new PathSandbox(repo.root);
@@ -107,11 +131,42 @@ export const searchHandler: ToolHandler = async (input, context) => safeTool<Sea
   return createSuccessEnvelope(result, `Returned ${result.returned_count} search results.`);
 });
 
+export const searchSymbolHandler: ToolHandler = async (input, context) => safeTool<SymbolQueryOptions & RepoInput>("repo_search_symbol", input, context, async (args) => {
+  const repo = context.registry.get(args.repo_id);
+  const sandbox = new PathSandbox(repo.root);
+  const result = await new RepoIndexService(repo.root, sandbox).symbols(args);
+  const response = {
+    index_id: result.index_id,
+    results: result.symbols,
+    matched_count: result.matched_count,
+    returned_count: result.returned_count,
+    truncated: result.truncated,
+    next_cursor: result.next_cursor,
+    warnings: result.warnings
+  };
+  audit({ tool: "repo_search_symbol", repo_id: args.repo_id, counts: { results: response.returned_count }, truncated: response.truncated, warnings: response.warnings });
+  return createSuccessEnvelope(response, `Returned ${response.returned_count} symbol search results.`);
+});
+
+export const outlineFileHandler: ToolHandler = async (input, context) => safeTool<{ path: string; max_symbols?: number } & RepoInput>("repo_outline_file", input, context, async (args) => {
+  const repo = context.registry.get(args.repo_id);
+  const result = await new OutlineService(new PathSandbox(repo.root)).outline(args);
+  audit({ tool: "repo_outline_file", repo_id: args.repo_id, paths: [result.path], counts: { symbols: result.symbols.length }, truncated: result.truncated, warnings: result.warnings });
+  return createSuccessEnvelope(result, `Outlined ${result.path}.`);
+});
+
 export const fetchFileHandler: ToolHandler = async (input, context) => safeTool<FetchFileOptions & RepoInput>("repo_fetch_file", input, context, async (args) => {
   const repo = context.registry.get(args.repo_id);
   const result = await new FileReader(new PathSandbox(repo.root)).read(args);
   audit({ tool: "repo_fetch_file", repo_id: args.repo_id, paths: [result.path], counts: { bytes: result.size_bytes }, truncated: result.truncated, warnings: result.warnings });
   return createSuccessEnvelope(result, `Read ${result.path}.`, { warnings: result.warnings });
+});
+
+export const fetchRegionHandler: ToolHandler = async (input, context) => safeTool<FetchRegionOptions & RepoInput>("repo_fetch_region", input, context, async (args) => {
+  const repo = context.registry.get(args.repo_id);
+  const result = await new OutlineService(new PathSandbox(repo.root)).fetchRegion(args);
+  audit({ tool: "repo_fetch_region", repo_id: args.repo_id, paths: [result.path], counts: { bytes: result.size_bytes }, truncated: result.truncated, warnings: result.warnings });
+  return createSuccessEnvelope(result, `Read ${result.region.kind} region from ${result.path}.`, { warnings: result.warnings });
 });
 
 export const readManyHandler: ToolHandler = async (input, context) => safeTool<ReadManyInput>("repo_read_many", input, context, async (args) => {
@@ -127,6 +182,14 @@ export const gitStatusHandler: ToolHandler = async (input, context) => safeTool<
   const result = await new GitService(repo.root).status();
   audit({ tool: "repo_git_status", repo_id: args.repo_id, counts: result.counts });
   return createSuccessEnvelope(result, result.clean ? "Repository is clean." : `Repository has ${result.files.length} changed files.`);
+});
+
+export const changedSinceHandler: ToolHandler = async (input, context) => safeTool<ChangedSinceInput>("repo_changed_since", input, context, async (args) => {
+  const repo = context.registry.get(args.repo_id);
+  const sandbox = new PathSandbox(repo.root);
+  const result = await new RepoIndexService(repo.root, sandbox).changedSince(args.index_id, { force_refresh: args.force_refresh });
+  audit({ tool: "repo_changed_since", repo_id: args.repo_id, counts: { added: result.added.length, modified: result.modified.length, removed: result.removed.length }, warnings: result.warnings });
+  return createSuccessEnvelope(result, result.changed ? "Repository changed since index." : "Repository unchanged since index.");
 });
 
 export const gitDiffHandler: ToolHandler = async (input, context) => safeTool<GitDiffInput>("repo_git_diff", input, context, async (args) => {

@@ -1,14 +1,20 @@
 import { readdir } from "node:fs/promises";
 import { DEFAULT_LIMITS } from "../policies/limits.js";
 import { RepoReaderError } from "../runtime/errors.js";
+import { canContainIncludedPath, isExcludedByGlob, isIncludedByGlob } from "./glob-service.js";
 import { IgnoreEngine } from "./ignore-engine.js";
 import { PathSandbox, validateRepoPath } from "./path-sandbox.js";
+
+export type TreeMode = "source_only" | "docs_only" | "tests_only" | "all";
 
 export type TreeOptions = {
   path?: string;
   max_depth?: number;
   page_size?: number;
   include_files?: boolean;
+  include_globs?: string[];
+  exclude_globs?: string[];
+  tree_mode?: TreeMode;
   respect_default_excludes?: boolean;
   include_generated?: boolean;
   include_dependencies?: boolean;
@@ -27,6 +33,9 @@ export class RepoTreeService {
     const cursor = parseCursor(options.cursor);
     const includeFiles = options.include_files ?? true;
     const respectDefaultExcludes = options.respect_default_excludes ?? true;
+    const modeGlobs = treeModeGlobs(options.tree_mode ?? "all");
+    const includeGlobs = options.include_globs ?? [];
+    const excludeGlobs = options.exclude_globs ?? [];
     const entries: Array<{ path: string; type: "file" | "directory" | "nested_repo" | "submodule"; size_bytes?: number }> = [];
     const excludedSummary: Record<string, number> = {};
 
@@ -41,12 +50,19 @@ export class RepoTreeService {
       }
       const boundary = await this.sandbox.classifyBoundary(repoPath);
       if (boundary.kind !== "normal" && repoPath !== ".") {
-        entries.push({ path: boundary.path, type: boundary.kind });
+        if (isTreePathIncluded(boundary.path, false, modeGlobs, includeGlobs, excludeGlobs, excludedSummary)) {
+          entries.push({ path: boundary.path, type: boundary.kind });
+        }
         return;
       }
       if (resolved.stat.isDirectory()) {
         if (repoPath !== ".") {
-          entries.push({ path: repoPath, type: "directory" });
+          if (!canTreeDescend(repoPath, modeGlobs, includeGlobs, excludeGlobs, excludedSummary)) {
+            return;
+          }
+          if (isTreePathIncluded(repoPath, true, modeGlobs, includeGlobs, excludeGlobs, excludedSummary)) {
+            entries.push({ path: repoPath, type: "directory" });
+          }
         }
         const children = await readdir(resolved.absolutePath, { withFileTypes: true });
         for (const child of children.sort((a, b) => a.name.localeCompare(b.name))) {
@@ -72,12 +88,17 @@ export class RepoTreeService {
             excludedSummary.default_excludes = (excludedSummary.default_excludes ?? 0) + 1;
             continue;
           }
+          if (!canTreeDescend(childRepoPath, modeGlobs, includeGlobs, excludeGlobs, excludedSummary)) {
+            continue;
+          }
           await walk(childRepoPath, depth + 1);
         }
         return;
       }
       if (includeFiles && resolved.stat.isFile()) {
-        entries.push({ path: repoPath, type: "file", size_bytes: Number(resolved.stat.size) });
+        if (isTreePathIncluded(repoPath, false, modeGlobs, includeGlobs, excludeGlobs, excludedSummary)) {
+          entries.push({ path: repoPath, type: "file", size_bytes: Number(resolved.stat.size) });
+        }
       }
     };
 
@@ -124,4 +145,66 @@ function isGeneratedPath(repoPath: string): boolean {
 
 function isDependencyPath(repoPath: string): boolean {
   return /(^|\/)node_modules(\/|$)/.test(repoPath);
+}
+
+function treeModeGlobs(mode: TreeMode): string[] {
+  if (mode === "source_only") {
+    return ["src/**", "include/**", "tools/**", "tests/**", "CMakeLists.txt", "README.md"];
+  }
+  if (mode === "docs_only") {
+    return ["README.md", "*.md", "docs/**", "**/*.md"];
+  }
+  if (mode === "tests_only") {
+    return ["tests/**", "test/**", "__tests__/**", "**/*.test.*", "**/*.spec.*"];
+  }
+  return [];
+}
+
+function canTreeDescend(
+  repoPath: string,
+  modeGlobs: string[],
+  includeGlobs: string[],
+  excludeGlobs: string[],
+  excludedSummary: Record<string, number>
+): boolean {
+  if (isExcludedByGlob(repoPath, excludeGlobs)) {
+    excludedSummary.glob_excludes = (excludedSummary.glob_excludes ?? 0) + 1;
+    return false;
+  }
+  return canContainIncludedPath(repoPath, modeGlobs) && canContainIncludedPath(repoPath, includeGlobs);
+}
+
+function isTreePathIncluded(
+  repoPath: string,
+  isDirectory: boolean,
+  modeGlobs: string[],
+  includeGlobs: string[],
+  excludeGlobs: string[],
+  excludedSummary: Record<string, number>
+): boolean {
+  if (isExcludedByGlob(repoPath, excludeGlobs)) {
+    excludedSummary.glob_excludes = (excludedSummary.glob_excludes ?? 0) + 1;
+    return false;
+  }
+  if (isDirectory) {
+    return isDirectoryIncludedByGlobs(repoPath, modeGlobs) && isDirectoryIncludedByGlobs(repoPath, includeGlobs);
+  }
+  return isIncludedByGlob(repoPath, modeGlobs) && isIncludedByGlob(repoPath, includeGlobs);
+}
+
+function isDirectoryIncludedByGlobs(path: string, globs: string[]): boolean {
+  if (globs.length === 0) {
+    return true;
+  }
+  const normalized = `${path}/`;
+  return globs.some((glob) => {
+    if (isIncludedByGlob(path, [glob])) {
+      return true;
+    }
+    const staticPrefix = glob.split("*", 1)[0];
+    if (staticPrefix.length === 0) {
+      return false;
+    }
+    return staticPrefix.startsWith(normalized) || normalized.startsWith(staticPrefix);
+  });
 }

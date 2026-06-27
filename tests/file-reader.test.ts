@@ -21,6 +21,34 @@ describe("FileReader", () => {
     expect(result.sha256).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  test("honors max_lines and returns pagination metadata", async () => {
+    const fixture = await createRepoFixture();
+    const reader = new FileReader(new PathSandbox(fixture.root));
+    await writeFile(join(fixture.root, "src", "large.ts"), Array.from({ length: 500 }, (_, index) => `line ${index + 1}`).join("\n"));
+
+    const result = await reader.read({ path: "src/large.ts", start_line: 1, max_lines: 120 });
+
+    expect(result.text.split("\n")).toHaveLength(120);
+    expect(result.end_line).toBe(120);
+    expect(result.has_more).toBe(true);
+    expect(result.next_start_line).toBe(121);
+    expect(result.max_lines_applied).toBe(120);
+    expect(result.truncated).toBe(true);
+  });
+
+  test("caps max_lines at the hard limit", async () => {
+    const fixture = await createRepoFixture();
+    const reader = new FileReader(new PathSandbox(fixture.root));
+    await writeFile(join(fixture.root, "src", "huge.ts"), Array.from({ length: 500 }, (_, index) => `line ${index + 1}`).join("\n"));
+
+    const result = await reader.read({ path: "src/huge.ts", max_lines: 999 });
+
+    expect(result.text.split("\n")).toHaveLength(400);
+    expect(result.max_lines_applied).toBe(400);
+    expect(result.next_start_line).toBe(401);
+    expect(result.warnings).toContain("MAX_LINES_CAPPED:400");
+  });
+
   test("blocks secret candidates even when default excludes are overridden", async () => {
     const fixture = await createRepoFixture();
     const reader = new FileReader(new PathSandbox(fixture.root));
@@ -94,6 +122,28 @@ describe("FileReader", () => {
     await expect(reader.read({ path: ".env.example", override_default_excludes: true })).rejects.toMatchObject({
       code: "SECRET_CANDIDATE_BLOCKED"
     });
+  });
+
+  test("redacts high-confidence secrets without redacting ordinary token variables", async () => {
+    const fixture = await createRepoFixture();
+    const reader = new FileReader(new PathSandbox(fixture.root));
+    await writeFile(join(fixture.root, "src", "engine.cpp"), [
+      "int TOKEN = 0;",
+      "const char* key = \"sk-realSecretValue123\";",
+      ""
+    ].join("\n"));
+
+    const result = await reader.read({ path: "src/engine.cpp" });
+
+    expect(result.text).toContain("int TOKEN = 0;");
+    expect(result.text).toContain("[REDACTED_SECRET]");
+    expect(result.redactions).toEqual([
+      expect.objectContaining({
+        line: 2,
+        kind: "openai_api_key",
+        confidence: "high"
+      })
+    ]);
   });
 
   test("blocks binary files", async () => {

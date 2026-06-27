@@ -28,7 +28,7 @@ export class CodexResultService {
       if (truncated) {
         throw new RepoReaderError("SIZE_LIMIT_EXCEEDED", `File exceeds max_bytes: ${resolved.repoPath}`);
       }
-      resultText = this.secretScanner.redact(decodeSafeText(buffer, resolved.repoPath));
+      resultText = this.secretScanner.redactText(decodeSafeText(buffer, resolved.repoPath));
     } catch (error) {
       if (!isNotFoundError(error)) {
         throw error;

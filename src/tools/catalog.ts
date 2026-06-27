@@ -5,8 +5,10 @@ import {
   changePlanHandler,
   cleanupPathsHandler,
   codexReviewHandler,
+  changedSinceHandler,
   decisionMemoryHandler,
   fetchFileHandler,
+  fetchRegionHandler,
   gitCommitHandler,
   gitDiffHandler,
   gitReviewHandler,
@@ -17,11 +19,15 @@ import {
   lastWriteHandler,
   listRootsHandler,
   nextActionHandler,
+  outlineFileHandler,
   planReviewHandler,
   prepareCodexTaskHandler,
   projectBriefHandler,
   readManyHandler,
+  indexSummaryHandler,
   searchHandler,
+  searchSymbolHandler,
+  symbolsHandler,
   taskInventoryHandler,
   treeHandler,
   writeCommitHandler,
@@ -85,6 +91,24 @@ export const toolCatalog: ToolDefinition[] = [
     handler: treeHandler
   },
   {
+    name: "repo_index_summary",
+    title: "Summarize repository index",
+    description: descriptions.repo_index_summary,
+    inputSchema: toolContracts.repo_index_summary.input,
+    outputSchema: toolContracts.repo_index_summary.output,
+    annotations: readOnlyAnnotations,
+    handler: indexSummaryHandler
+  },
+  {
+    name: "repo_symbols",
+    title: "List repository symbols",
+    description: descriptions.repo_symbols,
+    inputSchema: toolContracts.repo_symbols.input,
+    outputSchema: toolContracts.repo_symbols.output,
+    annotations: readOnlyAnnotations,
+    handler: symbolsHandler
+  },
+  {
     name: "repo_search",
     title: "Search repository text",
     description: descriptions.repo_search,
@@ -94,6 +118,24 @@ export const toolCatalog: ToolDefinition[] = [
     handler: searchHandler
   },
   {
+    name: "repo_search_symbol",
+    title: "Search repository symbols",
+    description: descriptions.repo_search_symbol,
+    inputSchema: toolContracts.repo_search_symbol.input,
+    outputSchema: toolContracts.repo_search_symbol.output,
+    annotations: readOnlyAnnotations,
+    handler: searchSymbolHandler
+  },
+  {
+    name: "repo_outline_file",
+    title: "Outline one source file",
+    description: descriptions.repo_outline_file,
+    inputSchema: toolContracts.repo_outline_file.input,
+    outputSchema: toolContracts.repo_outline_file.output,
+    annotations: readOnlyAnnotations,
+    handler: outlineFileHandler
+  },
+  {
     name: "repo_fetch_file",
     title: "Fetch one file",
     description: descriptions.repo_fetch_file,
@@ -101,6 +143,15 @@ export const toolCatalog: ToolDefinition[] = [
     outputSchema: toolContracts.repo_fetch_file.output,
     annotations: readOnlyAnnotations,
     handler: fetchFileHandler
+  },
+  {
+    name: "repo_fetch_region",
+    title: "Fetch a code region",
+    description: descriptions.repo_fetch_region,
+    inputSchema: toolContracts.repo_fetch_region.input,
+    outputSchema: toolContracts.repo_fetch_region.output,
+    annotations: readOnlyAnnotations,
+    handler: fetchRegionHandler
   },
   {
     name: "repo_read_many",
@@ -119,6 +170,15 @@ export const toolCatalog: ToolDefinition[] = [
     outputSchema: toolContracts.repo_git_status.output,
     annotations: readOnlyAnnotations,
     handler: gitStatusHandler
+  },
+  {
+    name: "repo_changed_since",
+    title: "Compare repository index",
+    description: descriptions.repo_changed_since,
+    inputSchema: toolContracts.repo_changed_since.input,
+    outputSchema: toolContracts.repo_changed_since.output,
+    annotations: readOnlyAnnotations,
+    handler: changedSinceHandler
   },
   {
     name: "repo_git_diff",

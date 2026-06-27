@@ -6,6 +6,27 @@ export function isExcludedByGlob(path: string, excludeGlobs: string[] = []): boo
   return excludeGlobs.some((glob) => matchesGlob(path, glob));
 }
 
+export function isIncludedByGlob(path: string, includeGlobs: string[] = []): boolean {
+  if (includeGlobs.length === 0) {
+    return true;
+  }
+  return includeGlobs.some((glob) => matchesGlob(path, glob));
+}
+
+export function canContainIncludedPath(path: string, includeGlobs: string[] = []): boolean {
+  if (includeGlobs.length === 0) {
+    return true;
+  }
+  const normalized = path === "." ? "" : `${path}/`;
+  return includeGlobs.some((glob) => {
+    const staticPrefix = glob.split("*", 1)[0];
+    if (staticPrefix.length === 0) {
+      return true;
+    }
+    return staticPrefix.startsWith(normalized) || normalized.startsWith(staticPrefix);
+  });
+}
+
 function globToRegExp(glob: string): RegExp {
   let pattern = "";
   for (let index = 0; index < glob.length; index += 1) {

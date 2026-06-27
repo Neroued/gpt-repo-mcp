@@ -71,6 +71,62 @@ describe("RepoTreeService", () => {
     expect(included.entries.some((entry) => entry.path === "node_modules/pkg/index.js")).toBe(true);
   });
 
+  test("filters entries with include_globs before pagination", async () => {
+    const fixture = await createRepoFixture();
+    const service = new RepoTreeService(fixture.root, new PathSandbox(fixture.root));
+
+    const result = await service.tree({
+      include_files: true,
+      include_globs: ["src/**/*.controller.ts"],
+      page_size: 1
+    });
+
+    expect(result.entries.map((entry) => entry.path)).toEqual(["src"]);
+    expect(result.truncated).toBe(true);
+
+    const second = await service.tree({
+      include_files: true,
+      include_globs: ["src/**/*.controller.ts"],
+      page_size: 10,
+      cursor: result.next_cursor
+    });
+    expect(second.entries.map((entry) => entry.path)).toEqual(["src/admin.controller.ts", "src/users.controller.ts"]);
+  });
+
+  test("lets exclude_globs override include_globs", async () => {
+    const fixture = await createRepoFixture();
+    const result = await new RepoTreeService(fixture.root, new PathSandbox(fixture.root)).tree({
+      include_files: true,
+      include_globs: ["src/**/*.controller.ts"],
+      exclude_globs: ["src/admin.*"]
+    });
+
+    expect(result.entries.map((entry) => entry.path)).toEqual(["src", "src/users.controller.ts"]);
+  });
+
+  test("supports tree modes and artifact defaults", async () => {
+    const fixture = await createRepoFixture();
+    await mkdir(join(fixture.root, "profiles"), { recursive: true });
+    await writeFile(join(fixture.root, "profiles", "trace.ncu-rep"), "profile\n");
+    await mkdir(join(fixture.root, "tests"), { recursive: true });
+    await writeFile(join(fixture.root, "tests", "app.test.ts"), "test('x', () => true);\n");
+
+    const service = new RepoTreeService(fixture.root, new PathSandbox(fixture.root));
+    const source = await service.tree({ include_files: true, tree_mode: "source_only" });
+    expect(source.entries.map((entry) => entry.path)).toEqual(expect.arrayContaining(["src", "src/app.ts", "tests", "tests/app.test.ts"]));
+    expect(source.entries.some((entry) => entry.path.startsWith("docs/"))).toBe(false);
+
+    const docs = await service.tree({ include_files: true, tree_mode: "docs_only" });
+    expect(docs.entries.map((entry) => entry.path)).toEqual(expect.arrayContaining(["docs", "docs/guide.md"]));
+    expect(docs.entries.some((entry) => entry.path.startsWith("src/"))).toBe(false);
+
+    const testsOnly = await service.tree({ include_files: true, tree_mode: "tests_only" });
+    expect(testsOnly.entries.map((entry) => entry.path)).toEqual(["tests", "tests/app.test.ts"]);
+
+    const all = await service.tree({ include_files: true });
+    expect(all.entries.some((entry) => entry.path === "profiles/trace.ncu-rep")).toBe(false);
+  });
+
   test("returns useful excluded summary keys", async () => {
     const fixture = await createRepoFixture();
     const sandbox = new PathSandbox(fixture.root);
