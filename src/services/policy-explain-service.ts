@@ -41,6 +41,9 @@ export class PolicyExplainService {
       cleanup_enabled: operationsPolicy.config.cleanup_enabled,
       max_paths_per_operation: operationsPolicy.config.max_paths_per_operation
     };
+    const visibleCleanupAllowedGlobs = operations.enabled && operations.cleanup_enabled
+      ? operationsPolicy.config.cleanup_allowed_globs
+      : [];
 
     const focused = options.operation ? { read, write, cleanup }[options.operation] : undefined;
     const summary = focused
@@ -63,7 +66,7 @@ export class PolicyExplainService {
         write_denied_globs: writePolicy.config.denied_globs,
         max_bytes_per_write: writePolicy.config.max_bytes_per_write,
         default_read_excludes: [...DEFAULT_EXCLUDES],
-        cleanup_allowed_globs: operationsPolicy.config.cleanup_allowed_globs
+        cleanup_allowed_globs: visibleCleanupAllowedGlobs
       },
       guidance: guidance(path, read, write, cleanup, operationsPolicy.config.enabled)
     };

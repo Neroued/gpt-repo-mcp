@@ -36,7 +36,7 @@ export const PolicyExplainResultSchema = z.object({
     write_denied_globs: z.array(z.string()).describe("Effective denied globs for file writes."),
     max_bytes_per_write: z.number().int().positive().describe("Maximum resulting file size for one write."),
     default_read_excludes: z.array(z.string()).describe("Default read/tree/search excludes applied by read tools."),
-    cleanup_allowed_globs: z.array(z.string()).describe("Effective cleanup allowed globs.")
+    cleanup_allowed_globs: z.array(z.string()).describe("Effective cleanup allowed globs. Empty when local operations or cleanup are disabled.")
   }).describe("Effective policy values useful for debugging blocked tool calls."),
   guidance: z.array(z.string()).describe("Actionable next steps for ChatGPT or the user.")
 });

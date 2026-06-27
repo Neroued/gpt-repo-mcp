@@ -118,6 +118,7 @@ describe("PolicyExplainService", () => {
       allowed: false,
       code: "OPERATIONS_DISABLED"
     });
+    expect(result.effective_policy.cleanup_allowed_globs).toEqual([]);
     expect(result.guidance).toContain("Local operations are disabled in the default MCP surface; inspect with repo_git_status and repo_git_diff, then use local git manually if recovery or commits are needed.");
   });
 
@@ -149,6 +150,7 @@ describe("PolicyExplainService", () => {
       code: "ALLOWED",
       matched_globs: [".chatgpt/tool-tests/**"]
     });
+    expect(result.effective_policy.cleanup_allowed_globs).toEqual([".chatgpt/tool-tests/**"]);
     expect(result.cleanup.notes).toContain("Cleanup refuses tracked files and does not run git clean.");
   });
 });
